@@ -32,7 +32,10 @@ export class BarCard extends LitElement {
   }
 
   public static getStubConfig(): object {
-    return {};
+    return {
+      type: 'custom:bar-card',
+      entity: 'sensor.example',
+    };
   }
 
   @property() public hass?: HomeAssistant;
