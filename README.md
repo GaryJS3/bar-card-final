@@ -1,6 +1,14 @@
 ![Project Maintenance](https://img.shields.io/maintenance/no/2020)
 
-# bar-card
+# bar-card-final
+
+> Personal fork of `bar-card` packaged for HACS as `bar-card-final.js`.
+> Lovelace usage stays unchanged: `type: custom:bar-card`.
+
+## HACS fork notes
+
+- Resource URL: `/hacsfiles/bar-card-final/bar-card-final.js`
+- Card type: `custom:bar-card`
 
 ## [Examples](#examples-1)
 
