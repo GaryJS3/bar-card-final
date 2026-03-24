@@ -1,8 +1,27 @@
-![Project Maintenance](https://img.shields.io/maintenance/no/2020)
 
-# bar-card
+# bar-card-final
 
-## [Examples](#examples-1)
+What is this? Its a fork of the now-defunct [Bar-Card](https://github.com/custom-cards/bar-card) by [Gluwc](https://github.com/Gluwc).
+
+Looking at alterntives, it seems like most people end up just recommend using card-mod or button-card with CSS mods and other junk. If that's what you want to do, I won't stop you. But I like the simplicity of bar-card and how I don't need a bunch of CSS and other things just to get some progress-bars that should honestly be a stock card in Home Assistant (not that hideous gauge card 🤮).
+
+This fork is really just for me, but feel free to use it or request features. There are just some things I always wanted it to do that I plan to add. This is mostly a project I am going to just work on whenever I want the bar-card to do something different - most changes will be done by me and Codex. I'm more of a C# and (novice) C++ guy, so Codex is helping bridge the gap there.
+
+> Personal fork of `bar-card` packaged for HACS as `bar-card-final.js`.
+> Lovelace usage stays unchanged: `type: custom:bar-card`.
+
+## New Features / Changes
+
+
+## Planned Features and Changes
+
+
+## HACS fork notes
+
+- Resource URL: `/hacsfiles/bar-card-final/bar-card-final.js`
+- Card type: `custom:bar-card`
+
+## [Examples](#examples-1) [From orginal REPO, will replace if changes to appearences make sense]
 
 ![Default](https://github.com/custom-cards/bar-card/blob/master/images/default.gif?raw=true)
 
@@ -35,8 +54,8 @@
 | height | string | 40px | Defines the height of the bar.
 | icon | string | icon | Defines the icon to be displayed.
 | limit_value | boolean | false | Limits value displayed to `min` and `max` value.
-| max | number | 100 | Defines maximum value of the bar.
-| min | number | 0 | Defines minimum value of the bar.
+| max | number, string, object | 100 | Defines maximum value of the bar. Supports fixed numbers, entity IDs, or `{ entity: <entity_id>, attribute: <attribute_name> }`.
+| min | number, string, object | 0 | Defines minimum value of the bar. Supports fixed numbers, entity IDs, or `{ entity: <entity_id>, attribute: <attribute_name> }`.
 | name | string | none | Defines custom entity name.
 | positions | object | none | Defines the positions of the card elements. See [Positions Options](#positions-options).
 | severity | object | none | A list of severity values. See [Severity Options](#severity-options).
@@ -125,6 +144,29 @@ It's **required** to load this card as `module`.
 ```yaml
 entity: sensor.example
 title: Default
+type: 'custom:bar-card'
+```
+
+### Dynamic Min/Max from Entities
+
+You can use another entity (or entity attribute) for `min` and `max`.
+
+```yaml
+entity: sensor.ai1_ai1_gpu_0_memory_used
+icon: mdi:brain
+name: VRAM
+max: sensor.ai1_ai1_gpu_0_memory_total
+min: 0
+type: 'custom:bar-card'
+```
+
+Object form with attribute:
+
+```yaml
+entity: sensor.example_used
+max:
+  entity: sensor.example_total
+  attribute: available_capacity
 type: 'custom:bar-card'
 ```
 
@@ -250,7 +292,10 @@ type: 'custom:bar-card'
 
 ## Credits
 
+Orignal Bar-Card Repo by [Gluwc](https://github.com/Gluwc)
+
 Inspired by [Big Number Card](https://github.com/ciotlosm/custom-lovelace/tree/master/bignumber-card) by [ciotlosm](https://github.com/ciotlosm).
+
 
 ## Links
 

@@ -40,17 +40,19 @@ export function hasConfigOrEntitiesChanged(element: any, changedProps: PropertyV
   if (changedProps.has('config') || forceUpdate) {
     return true;
   }
+  const trackedConfigKeys = ['entity', 'min', 'max', 'target'];
   for (const config of element._configArray) {
-    if (config.entity) {
-      const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
-      if (oldHass) {
-        if (oldHass.states[config.entity] !== element.hass!.states[config.entity]) {
-          return true;
-        } else {
-          continue;
-        }
-      }
+    const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
+    if (!oldHass) {
       return true;
+    }
+    for (const key of trackedConfigKeys) {
+      const configValue = config[key];
+      const value =
+        configValue && typeof configValue == 'object' && configValue.entity ? configValue.entity : configValue;
+      if (typeof value == 'string' && oldHass.states[value] !== element.hass!.states[value]) {
+        return true;
+      }
     }
   }
   return false;
