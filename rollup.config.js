@@ -34,7 +34,7 @@ export default [
   {
     input: 'src/bar-card.ts',
     output: {
-      dir: 'dist',
+      file: 'dist/bar-card-final.js',
       format: 'es',
     },
     plugins: [...plugins],
