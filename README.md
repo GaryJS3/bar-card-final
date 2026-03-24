@@ -35,8 +35,8 @@
 | height | string | 40px | Defines the height of the bar.
 | icon | string | icon | Defines the icon to be displayed.
 | limit_value | boolean | false | Limits value displayed to `min` and `max` value.
-| max | number | 100 | Defines maximum value of the bar.
-| min | number | 0 | Defines minimum value of the bar.
+| max | number, string, object | 100 | Defines maximum value of the bar. Supports fixed numbers, entity IDs, or `{ entity: <entity_id>, attribute: <attribute_name> }`.
+| min | number, string, object | 0 | Defines minimum value of the bar. Supports fixed numbers, entity IDs, or `{ entity: <entity_id>, attribute: <attribute_name> }`.
 | name | string | none | Defines custom entity name.
 | positions | object | none | Defines the positions of the card elements. See [Positions Options](#positions-options).
 | severity | object | none | A list of severity values. See [Severity Options](#severity-options).
@@ -125,6 +125,29 @@ It's **required** to load this card as `module`.
 ```yaml
 entity: sensor.example
 title: Default
+type: 'custom:bar-card'
+```
+
+### Dynamic Min/Max from Entities
+
+You can use another entity (or entity attribute) for `min` and `max`.
+
+```yaml
+entity: sensor.ai1_ai1_gpu_0_memory_used
+icon: mdi:brain
+name: VRAM
+max: sensor.ai1_ai1_gpu_0_memory_total
+min: 0
+type: 'custom:bar-card'
+```
+
+Object form with attribute:
+
+```yaml
+entity: sensor.example_used
+max:
+  entity: sensor.example_total
+  attribute: available_capacity
 type: 'custom:bar-card'
 ```
 
