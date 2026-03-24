@@ -147,10 +147,13 @@ export class BarCard extends LitElement {
           }
         }
 
+        const minValue = this._computeConfigNumber(config.min, 0);
+        const maxValue = this._computeConfigNumber(config.max, 100);
+
         // If limit_value is defined limit the displayed value to min and max.
         if (config.limit_value) {
-          entityState = Math.min(entityState, config.max);
-          entityState = Math.max(entityState, config.min);
+          entityState = Math.min(entityState, maxValue);
+          entityState = Math.max(entityState, minValue);
         }
 
         // If decimal is defined check if NaN and apply number fix.
@@ -263,18 +266,18 @@ export class BarCard extends LitElement {
         switch (config.positions.minmax) {
           case 'outside':
             minMaxOutside = html`
-              <bar-card-min>${config.min}${unitOfMeasurement}</bar-card-min>
+              <bar-card-min>${minValue}${unitOfMeasurement}</bar-card-min>
               <bar-card-divider>/</bar-card-divider>
-              <bar-card-max>${config.max}${unitOfMeasurement}</bar-card-max>
+              <bar-card-max>${maxValue}${unitOfMeasurement}</bar-card-max>
             `;
             break;
           case 'inside':
             minMaxInside = html`
               <bar-card-min class="${config.direction == 'up' ? 'min-direction-up' : 'min-direction-right'}"
-                >${config.min}${unitOfMeasurement}</bar-card-min
+                >${minValue}${unitOfMeasurement}</bar-card-min
               >
               <bar-card-divider>/</bar-card-divider>
-              <bar-card-max> ${config.max}${unitOfMeasurement}</bar-card-max>
+              <bar-card-max> ${maxValue}${unitOfMeasurement}</bar-card-max>
             `;
             break;
           case 'off':
@@ -288,7 +291,7 @@ export class BarCard extends LitElement {
           case 'outside':
             valueOutside = html`
               <bar-card-value class="${config.direction == 'up' ? 'value-direction-up' : 'value-direction-right'}"
-                >${config.complementary ? config.max - entityState : entityState} ${unitOfMeasurement}</bar-card-value
+                >${config.complementary ? maxValue - entityState : entityState} ${unitOfMeasurement}</bar-card-value
               >
             `;
             break;
@@ -300,7 +303,7 @@ export class BarCard extends LitElement {
                   : config.direction == 'up'
                   ? 'value-direction-up'
                   : 'value-direction-right'}"
-                >${config.complementary ? config.max - entityState : entityState} ${unitOfMeasurement}</bar-card-value
+                >${config.complementary ? maxValue - entityState : entityState} ${unitOfMeasurement}</bar-card-value
               >
             `;
             break;
@@ -538,6 +541,8 @@ export class BarCard extends LitElement {
   private _computePercent(value: string, index: number): number {
     const config = this._configArray[index];
     const numberValue = Number(value);
+    const minValue = this._computeConfigNumber(config.min, 0);
+    const maxValue = this._computeConfigNumber(config.max, 100);
 
     if (value == 'unavailable') return 0;
     if (isNaN(numberValue)) return 100;
@@ -547,10 +552,26 @@ export class BarCard extends LitElement {
       case 'left-reverse':
       case 'up-reverse':
       case 'down-reverse':
-        return 100 - (100 * (numberValue - config.min)) / (config.max - config.min);
+        return 100 - (100 * (numberValue - minValue)) / (maxValue - minValue);
       default:
-        return (100 * (numberValue - config.min)) / (config.max - config.min);
+        return (100 * (numberValue - minValue)) / (maxValue - minValue);
     }
+  }
+
+  private _computeConfigNumber(configValue: string | number, fallback: number): number {
+    const numericValue = Number(configValue);
+    if (!isNaN(numericValue)) {
+      return numericValue;
+    }
+
+    if (this.hass && typeof configValue == 'string' && this.hass.states[configValue]) {
+      const entityValue = Number(this.hass.states[configValue].state);
+      if (!isNaN(entityValue)) {
+        return entityValue;
+      }
+    }
+
+    return fallback;
   }
 
   private _handleAction(ev): void {
