@@ -47,7 +47,9 @@ export function hasConfigOrEntitiesChanged(element: any, changedProps: PropertyV
       return true;
     }
     for (const key of trackedConfigKeys) {
-      const value = config[key];
+      const configValue = config[key];
+      const value =
+        configValue && typeof configValue == 'object' && configValue.entity ? configValue.entity : configValue;
       if (typeof value == 'string' && oldHass.states[value] !== element.hass!.states[value]) {
         return true;
       }

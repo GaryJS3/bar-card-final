@@ -17,8 +17,8 @@ export interface BarCardConfig {
   hold_action?: ActionConfig;
   icon: any;
   limit_value: boolean;
-  max: number | string;
-  min: number | string;
+  max: number | string | { entity: string; attribute?: string };
+  min: number | string | { entity: string; attribute?: string };
   name: string;
   positions: any;
   severity: any;

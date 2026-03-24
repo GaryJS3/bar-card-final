@@ -549,6 +549,7 @@ export class BarCard extends LitElement {
 
     if (value == 'unavailable') return 0;
     if (isNaN(numberValue)) return 100;
+    if (maxValue == minValue) return 0;
 
     switch (config.direction) {
       case 'right-reverse':
@@ -561,16 +562,37 @@ export class BarCard extends LitElement {
     }
   }
 
-  private _computeConfigNumber(configValue: string | number, fallback: number): number {
-    const numericValue = Number(configValue);
-    if (!isNaN(numericValue)) {
-      return numericValue;
+  private _computeConfigNumber(configValue: unknown, fallback: number): number {
+    const parseNumber = (value: unknown): number => {
+      if (typeof value == 'number') return value;
+      if (typeof value == 'string') {
+        const trimmedValue = value.trim();
+        if (trimmedValue == '') return NaN;
+        return Number.parseFloat(trimmedValue);
+      }
+      return NaN;
+    };
+
+    const numericValue = parseNumber(configValue);
+    if (!isNaN(numericValue)) return numericValue;
+
+    const getEntityValue = (entityId: string, attribute?: string): number => {
+      if (!this.hass || !this.hass.states[entityId]) return NaN;
+      const entityState = this.hass.states[entityId];
+      const sourceValue = attribute ? entityState.attributes[attribute] : entityState.state;
+      return parseNumber(sourceValue);
+    };
+
+    if (typeof configValue == 'string') {
+      const entityValue = getEntityValue(configValue);
+      if (!isNaN(entityValue)) return entityValue;
     }
 
-    if (this.hass && typeof configValue == 'string' && this.hass.states[configValue]) {
-      const entityValue = Number(this.hass.states[configValue].state);
-      if (!isNaN(entityValue)) {
-        return entityValue;
+    if (configValue && typeof configValue == 'object') {
+      const entityConfig = configValue as { entity?: string; attribute?: string };
+      if (entityConfig.entity) {
+        const entityValue = getEntityValue(entityConfig.entity, entityConfig.attribute);
+        if (!isNaN(entityValue)) return entityValue;
       }
     }
 
