@@ -1,5 +1,5 @@
 import { LitElement, html, customElement, property, TemplateResult, CSSResult, css, PropertyValues } from 'lit-element';
-import { HomeAssistant, fireEvent, LovelaceCardEditor, ActionConfig } from 'custom-card-helpers';
+import { HomeAssistant, fireEvent, LovelaceCardEditor } from 'custom-card-helpers';
 
 import { BarCardConfig } from './types';
 import { createEditorConfigArray, arrayMove, hasConfigOrEntitiesChanged } from './helpers';
@@ -19,6 +19,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
 
   public setConfig(config: BarCardConfig): void {
     this._config = { ...config };
+    this._configArray = [];
+    this._entityOptionsArray = [];
+    this._options = undefined;
 
     if (!config.entity && !config.entities) {
       this._config.entity = 'none';
@@ -90,7 +93,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     const actionsOptions = {
       icon: 'gesture-tap',
       name: 'Actions',
-      secondary: 'Coming soon... Use code editor for Actions.',
+      secondary: 'Configure tap, hold and double tap actions.',
       show: false,
     };
 
@@ -146,6 +149,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
             card: cardOptions,
             severity: severityOptions,
             animation: animationOptions,
+            actions: actionsOptions,
           },
         },
       };
@@ -159,16 +163,123 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _createActionsElement(index): TemplateResult {
-    const options = this._options.entities.options.entities[index].options.actions;
+    let config;
+    let options;
+    if (index === null) {
+      options = this._options.appearance.options.actions;
+      config = this._config;
+    } else {
+      options = this._options.entities.options.entities[index].options.actions;
+      config = this._configArray[index];
+    }
+
+    const actionConfigs = [
+      { key: 'tap_action', label: 'Tap' },
+      { key: 'hold_action', label: 'Hold' },
+      { key: 'double_tap_action', label: 'Double Tap' },
+    ];
+
     return html`
-      <div class="sub-category" style="opacity: 0.5;">
-        <div>
+      <div class="category">
+        <div
+          class="sub-category"
+          @click=${this._toggleThing}
+          .options=${options}
+          .optionsTarget=${this._options.appearance.options}
+        >
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
+            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
+        ${options.show
+          ? html`
+              <div class="value">
+                ${actionConfigs.map(
+                  actionConfig => html`
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <paper-dropdown-menu
+                        label="${actionConfig.label} Action"
+                        @selected-item-changed=${this._updateAction}
+                        .configObject=${config}
+                        .actionKey=${actionConfig.key}
+                        .actionAttribute=${'action'}
+                      >
+                        <paper-listbox
+                          slot="dropdown-content"
+                          attr-for-selected="item-name"
+                          selected="${config[actionConfig.key] ? config[actionConfig.key].action : ''}"
+                        >
+                          <paper-item item-name="">none</paper-item>
+                          <paper-item item-name="more-info">more-info</paper-item>
+                          <paper-item item-name="toggle">toggle</paper-item>
+                          <paper-item item-name="navigate">navigate</paper-item>
+                          <paper-item item-name="url">url</paper-item>
+                          <paper-item item-name="call-service">call-service</paper-item>
+                        </paper-listbox>
+                      </paper-dropdown-menu>
+                      ${config[actionConfig.key]
+                        ? html`
+                            <ha-icon
+                              class="ha-icon-large"
+                              icon="mdi:close"
+                              @click=${this._updateAction}
+                              .value=${''}
+                              .configObject=${config}
+                              .actionKey=${actionConfig.key}
+                              .actionAttribute=${'action'}
+                            ></ha-icon>
+                          `
+                        : ''}
+                    </div>
+                    ${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'
+                      ? html`
+                          <paper-input
+                            label="${actionConfig.label} Navigation Path"
+                            .value="${config[actionConfig.key].navigation_path
+                              ? config[actionConfig.key].navigation_path
+                              : ''}"
+                            editable
+                            .configObject=${config}
+                            .actionKey=${actionConfig.key}
+                            .actionAttribute=${'navigation_path'}
+                            @value-changed=${this._updateAction}
+                          ></paper-input>
+                        `
+                      : ''}
+                    ${config[actionConfig.key] && config[actionConfig.key].action === 'url'
+                      ? html`
+                          <paper-input
+                            label="${actionConfig.label} URL"
+                            .value="${config[actionConfig.key].url_path ? config[actionConfig.key].url_path : ''}"
+                            editable
+                            .configObject=${config}
+                            .actionKey=${actionConfig.key}
+                            .actionAttribute=${'url_path'}
+                            @value-changed=${this._updateAction}
+                          ></paper-input>
+                        `
+                      : ''}
+                    ${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'
+                      ? html`
+                          <paper-input
+                            label="${actionConfig.label} Service"
+                            .value="${config[actionConfig.key].service ? config[actionConfig.key].service : ''}"
+                            editable
+                            .configObject=${config}
+                            .actionKey=${actionConfig.key}
+                            .actionAttribute=${'service'}
+                            @value-changed=${this._updateAction}
+                          ></paper-input>
+                        `
+                      : ''}
+                  `,
+                )}
+              </div>
+            `
+          : ''}
       </div>
     `;
   }
@@ -179,7 +290,6 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     }
 
     const options = this._options.entities;
-    const entities = Object.keys(this.hass.states);
     const valueElementArray: TemplateResult[] = [];
     for (const config of this._configArray) {
       const index = this._configArray.indexOf(config);
@@ -328,7 +438,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                 <div class="card-background">
                   ${this._createCardElement()} ${this._createBarElement(null)} ${this._createValueElement(null)}
                   ${this._createPositionsElement(null)} ${this._createSeverityElement(null)}
-                  ${this._createAnimationElement(null)}
+                  ${this._createAnimationElement(null)} ${this._createActionsElement(null)}
                 </div>
               `
             : ''
@@ -762,6 +872,23 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                   @value-changed=${this._valueChanged}
                 ></paper-input>
                 <div>
+                  <paper-dropdown-menu
+                    label="Stack"
+                    @selected-item-changed=${this._valueChanged}
+                    .configObject=${config}
+                    .configAttribute=${'stack'}
+                  >
+                    <paper-listbox
+                      slot="dropdown-content"
+                      attr-for-selected="item-name"
+                      selected="${config.stack || ''}"
+                    >
+                      <paper-item item-name="">none</paper-item>
+                      <paper-item item-name="horizontal">horizontal</paper-item>
+                    </paper-listbox>
+                  </paper-dropdown-menu>
+                </div>
+                <div>
                   ${config.entity_row
                     ? html`
                         <ha-switch
@@ -781,6 +908,29 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                           .value=${!config.entity_row}
                           @change=${this._valueChanged}
                           >Entity Row</ha-switch
+                        >
+                      `}
+                </div>
+                <div>
+                  ${config.entity_config
+                    ? html`
+                        <ha-switch
+                          checked
+                          .configAttribute=${'entity_config'}
+                          .configObject=${config}
+                          .value=${!config.entity_config}
+                          @change=${this._valueChanged}
+                          >Entity Config</ha-switch
+                        >
+                      `
+                    : html`
+                        <ha-switch
+                          unchecked
+                          .configAttribute=${'entity_config'}
+                          .configObject=${config}
+                          .value=${!config.entity_config}
+                          @change=${this._valueChanged}
+                          >Entity Config</ha-switch
                         >
                       `}
                 </div>
@@ -1035,6 +1185,37 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           : ''}
       </div>
     `;
+  }
+
+  private _updateAction(ev): void {
+    if (!this._config || !this.hass) {
+      return;
+    }
+    const target = ev.target;
+    const configObject = target.configObject;
+    const actionKey = target.actionKey;
+    const actionAttribute = target.actionAttribute;
+
+    if (!configObject || !actionKey || !actionAttribute) {
+      return;
+    }
+
+    if (!configObject[actionKey]) {
+      configObject[actionKey] = {};
+    }
+
+    if (target.value === '') {
+      delete configObject[actionKey][actionAttribute];
+    } else {
+      configObject[actionKey][actionAttribute] = target.value;
+    }
+
+    if (Object.keys(configObject[actionKey]).length === 0) {
+      delete configObject[actionKey];
+    }
+
+    this._config.entities = this._configArray;
+    fireEvent(this, 'config-changed', { config: this._config });
   }
 
   private _toggleThing(ev): void {
@@ -1325,9 +1506,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     `;
   }
 }
-// @ts-ignore
+// @ts-expect-error
 window.customCards = window.customCards || [];
-// @ts-ignore
+// @ts-expect-error
 window.customCards.push({
   type: 'bar-card',
   name: 'Bar Card',
