@@ -1,16 +1,27 @@
-![Project Maintenance](https://img.shields.io/maintenance/no/2020)
 
 # bar-card-final
 
+What is this? Its a fork of the now-defunct [Bar-Card](https://github.com/custom-cards/bar-card) by [Gluwc](https://github.com/Gluwc).
+
+Looking at alterntives, it seems like most people end up just recommend using card-mod or button-card with CSS mods and other junk. If that's what you want to do, I won't stop you. But I like the simplicity of bar-card and how I don't need a bunch of CSS and other things just to get some progress-bars that should honestly be a stock card in Home Assistant (not that hideous gauge card 🤮).
+
+This fork is really just for me, but feel free to use it or request features. There are just some things I always wanted it to do that I plan to add. This is mostly a project I am going to just work on whenever I want the bar-card to do something different - most changes will be done by me and Codex. I'm more of a C# and (novice) C++ guy, so Codex is helping bridge the gap there.
+
 > Personal fork of `bar-card` packaged for HACS as `bar-card-final.js`.
 > Lovelace usage stays unchanged: `type: custom:bar-card`.
+
+## New Features / Changes
+
+
+## Planned Features and Changes
+
 
 ## HACS fork notes
 
 - Resource URL: `/hacsfiles/bar-card-final/bar-card-final.js`
 - Card type: `custom:bar-card`
 
-## [Examples](#examples-1)
+## [Examples](#examples-1) [From orginal REPO, will replace if changes to appearences make sense]
 
 ![Default](https://github.com/custom-cards/bar-card/blob/master/images/default.gif?raw=true)
 
@@ -258,7 +269,10 @@ type: 'custom:bar-card'
 
 ## Credits
 
+Orignal Bar-Card Repo by [Gluwc](https://github.com/Gluwc)
+
 Inspired by [Big Number Card](https://github.com/ciotlosm/custom-lovelace/tree/master/bignumber-card) by [ciotlosm](https://github.com/ciotlosm).
+
 
 ## Links
 
