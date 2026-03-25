@@ -200,26 +200,48 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                 ${actionConfigs.map(
                   actionConfig => html`
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <paper-dropdown-menu
-                        label="${actionConfig.label} Action"
-                        @selected-item-changed=${this._updateAction}
+                      <label class="select-label">${actionConfig.label} Action</label>
+                      <select
+                        class="editor-select"
+                        @change=${this._updateAction}
                         .configObject=${config}
                         .actionKey=${actionConfig.key}
                         .actionAttribute=${'action'}
                       >
-                        <paper-listbox
-                          slot="dropdown-content"
-                          attr-for-selected="item-name"
-                          selected="${config[actionConfig.key] ? config[actionConfig.key].action : ''}"
+                        <option value="" ?selected=${!(config[actionConfig.key] && config[actionConfig.key].action)}>
+                          none
+                        </option>
+                        <option
+                          value="more-info"
+                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'more-info'}
                         >
-                          <paper-item item-name="">none</paper-item>
-                          <paper-item item-name="more-info">more-info</paper-item>
-                          <paper-item item-name="toggle">toggle</paper-item>
-                          <paper-item item-name="navigate">navigate</paper-item>
-                          <paper-item item-name="url">url</paper-item>
-                          <paper-item item-name="call-service">call-service</paper-item>
-                        </paper-listbox>
-                      </paper-dropdown-menu>
+                          more-info
+                        </option>
+                        <option
+                          value="toggle"
+                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'toggle'}
+                        >
+                          toggle
+                        </option>
+                        <option
+                          value="navigate"
+                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'}
+                        >
+                          navigate
+                        </option>
+                        <option
+                          value="url"
+                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'url'}
+                        >
+                          url
+                        </option>
+                        <option
+                          value="call-service"
+                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'}
+                        >
+                          call-service
+                        </option>
+                      </select>
                       ${config[actionConfig.key]
                         ? html`
                             <ha-icon
@@ -475,22 +497,17 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           ? html`
               <div class="value">
                 <div>
-                  <paper-dropdown-menu
-                    label="Direction"
-                    @selected-item-changed=${this._valueChanged}
+                  <label class="select-label">Direction</label>
+                  <select
+                    class="editor-select"
+                    @change=${this._valueChanged}
                     .configObject=${config}
                     .configAttribute=${'direction'}
                     .ignoreNull=${true}
                   >
-                    <paper-listbox
-                      slot="dropdown-content"
-                      attr-for-selected="item-name"
-                      selected="${config.direction ? config.direction : null}"
-                    >
-                      <paper-item item-name="right">right</paper-item>
-                      <paper-item item-name="up">up</paper-item>
-                    </paper-listbox>
-                  </paper-dropdown-menu>
+                    <option value="right" ?selected=${!config.direction || config.direction === 'right'}>right</option>
+                    <option value="up" ?selected=${config.direction === 'up'}>up</option>
+                  </select>
                   ${config.direction
                     ? html`
                         <ha-icon
@@ -586,23 +603,20 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
             ? html`
                 <div class="value">
                   <div>
-                    <paper-dropdown-menu
-                      label="State"
-                      @selected-item-changed=${this._valueChanged}
+                    <label class="select-label">State</label>
+                    <select
+                      class="editor-select"
+                      @change=${this._valueChanged}
                       .configAttribute=${'state'}
                       .configObject=${config.animation}
                       .index=${index}
                       .ignoreNull=${true}
                     >
-                      <paper-listbox
-                        slot="dropdown-content"
-                        attr-for-selected="item-name"
-                        selected="${config.animation.state ? config.animation.state : null}"
-                      >
-                        <paper-item item-name="on">on</paper-item>
-                        <paper-item item-name="off">off</paper-item>
-                      </paper-listbox>
-                    </paper-dropdown-menu>
+                      <option value="on" ?selected=${config.animation.state === 'on'}>on</option>
+                      <option value="off" ?selected=${!config.animation.state || config.animation.state === 'off'}>
+                        off
+                      </option>
+                    </select>
                     ${config.animation.state
                       ? html`
                           <ha-icon
@@ -631,20 +645,20 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
             : html`
                 <div class="value">
                   <div>
-                    <paper-dropdown-menu
-                      label="State"
-                      @selected-item-changed=${this._valueChanged}
+                    <label class="select-label">State</label>
+                    <select
+                      class="editor-select"
+                      @change=${this._valueChanged}
                       .configObject=${config}
                       .configAttribute=${'state'}
                       .configAdd=${'animation'}
                       .index=${index}
                       .ignoreNull=${true}
                     >
-                      <paper-listbox slot="dropdown-content" attr-for-selected="item-name">
-                        <paper-item item-name="on">on</paper-item>
-                        <paper-item item-name="off">off</paper-item>
-                      </paper-listbox>
-                    </paper-dropdown-menu>
+                      <option value="">select</option>
+                      <option value="on">on</option>
+                      <option value="off">off</option>
+                    </select>
                   </div>
                   <paper-input
                     label="Speed"
@@ -872,21 +886,16 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                   @value-changed=${this._valueChanged}
                 ></paper-input>
                 <div>
-                  <paper-dropdown-menu
-                    label="Stack"
-                    @selected-item-changed=${this._valueChanged}
+                  <label class="select-label">Stack</label>
+                  <select
+                    class="editor-select"
+                    @change=${this._valueChanged}
                     .configObject=${config}
                     .configAttribute=${'stack'}
                   >
-                    <paper-listbox
-                      slot="dropdown-content"
-                      attr-for-selected="item-name"
-                      selected="${config.stack || ''}"
-                    >
-                      <paper-item item-name="">none</paper-item>
-                      <paper-item item-name="horizontal">horizontal</paper-item>
-                    </paper-listbox>
-                  </paper-dropdown-menu>
+                    <option value="" ?selected=${!config.stack}>none</option>
+                    <option value="horizontal" ?selected=${config.stack === 'horizontal'}>horizontal</option>
+                  </select>
                 </div>
                 <div>
                   ${config.entity_row
@@ -962,23 +971,18 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       if (config.positions[position]) {
         positionElementsArray.push(html`
           <div class="value">
-            <paper-dropdown-menu
-              label="${position}"
-              @value-changed=${this._valueChanged}
+            <label class="select-label">${position}</label>
+            <select
+              class="editor-select"
+              @change=${this._valueChanged}
               .configAttribute=${position}
               .configObject=${config.positions}
               .ignoreNull=${true}
             >
-              <paper-listbox
-                slot="dropdown-content"
-                attr-for-selected="item-name"
-                .selected=${config.positions[position]}
-              >
-                <paper-item item-name="inside">inside</paper-item>
-                <paper-item item-name="outside">outside</paper-item>
-                <paper-item item-name="off">off</paper-item>
-              </paper-listbox>
-            </paper-dropdown-menu>
+              <option value="inside" ?selected=${config.positions[position] === 'inside'}>inside</option>
+              <option value="outside" ?selected=${config.positions[position] === 'outside'}>outside</option>
+              <option value="off" ?selected=${config.positions[position] === 'off'}>off</option>
+            </select>
             <ha-icon
               class="ha-icon-large"
               icon="mdi:close"
@@ -992,18 +996,18 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       } else {
         positionElementsArray.push(html`
           <div class="value">
-            <paper-dropdown-menu
-              label="${position}"
-              @value-changed=${this._valueChanged}
+            <label class="select-label">${position}</label>
+            <select
+              class="editor-select"
+              @change=${this._valueChanged}
               .configAttribute=${position}
               .configObject=${config.positions}
             >
-              <paper-listbox slot="dropdown-content" .selected=${null}>
-                <paper-item>inside</paper-item>
-                <paper-item>outside</paper-item>
-                <paper-item>off</paper-item>
-              </paper-listbox>
-            </paper-dropdown-menu>
+              <option value="">default</option>
+              <option value="inside">inside</option>
+              <option value="outside">outside</option>
+              <option value="off">off</option>
+            </select>
           </div>
         `);
       }
@@ -1502,6 +1506,22 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       .ha-icon-large {
         cursor: pointer;
         margin: 0px 4px;
+      }
+      .editor-select {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        color: var(--primary-text-color);
+        padding: 8px;
+        margin: 6px 0 10px;
+      }
+      .select-label {
+        display: block;
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        margin-top: 10px;
       }
     `;
   }
