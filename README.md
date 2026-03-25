@@ -12,16 +12,10 @@ This fork is really just for me, but feel free to use it or request features. Th
 ## New Features / Changes
 
 - Dynamic `min` and `max` values now support fixed numbers, entity IDs, or `{ entity, attribute }` objects.
-- This lets bars use another entity as the min/max source, such as total RAM, battery capacity, or storage size.
+- - This lets bars use another entity as the min/max source, such as total RAM, battery capacity, or storage size.
 - The visual editor got a major cleanup with a more native Home Assistant layout, clearer controls, inline help text, and better empty states.
 - Example:
 
-```yaml
-- entity: sensor.ai1_ai1_memory_used_2
-  icon: mdi:memory
-  name: RAM
-  max: sensor.ai1_ai1_memory_total
-```
 
 ## Planned Features and Changes
 
