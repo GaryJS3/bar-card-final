@@ -158,7 +158,130 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
 
   protected render(): TemplateResult | void {
     return html`
-      ${this._createEntitiesElement()} ${this._createAppearanceElement()}
+      <div class="editor-shell">${this._createEntitiesElement()} ${this._createAppearanceElement()}</div>
+    `;
+  }
+
+  private _renderToggleField(label: string, configObject, configAttribute: string): TemplateResult {
+    const checked = !!configObject[configAttribute];
+    return html`
+      <div class="toggle-card">
+        <ha-formfield .label=${label}>
+          <ha-switch
+            ?checked=${checked}
+            .configAttribute=${configAttribute}
+            .configObject=${configObject}
+            .value=${!checked}
+            @change=${this._valueChanged}
+          ></ha-switch>
+        </ha-formfield>
+      </div>
+    `;
+  }
+
+  private _renderChevron(show: boolean): TemplateResult {
+    return html`
+      <ha-icon class="chevron" .icon=${show ? `mdi:chevron-up` : `mdi:chevron-down`}></ha-icon>
+    `;
+  }
+
+  private _renderFieldAction(actionConfig, config): TemplateResult {
+    return html`
+      <div class="field-card action-card">
+        <div class="action-row">
+          <label class="select-label">${actionConfig.label} Action</label>
+          <select
+            class="editor-select"
+            @change=${this._updateAction}
+            .configObject=${config}
+            .actionKey=${actionConfig.key}
+            .actionAttribute=${'action'}
+          >
+            <option value="" ?selected=${!(config[actionConfig.key] && config[actionConfig.key].action)}>none</option>
+            <option
+              value="more-info"
+              ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'more-info'}
+            >
+              more-info
+            </option>
+            <option
+              value="toggle"
+              ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'toggle'}
+            >
+              toggle
+            </option>
+            <option
+              value="navigate"
+              ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'}
+            >
+              navigate
+            </option>
+            <option value="url" ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'url'}
+              >url</option
+            >
+            <option
+              value="call-service"
+              ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'}
+            >
+              call-service
+            </option>
+          </select>
+          ${config[actionConfig.key]
+            ? html`
+                <ha-icon
+                  class="ha-icon-large clear-icon"
+                  icon="mdi:close"
+                  @click=${this._updateAction}
+                  .value=${''}
+                  .configObject=${config}
+                  .actionKey=${actionConfig.key}
+                  .actionAttribute=${'action'}
+                ></ha-icon>
+              `
+            : html`
+                <span class="action-spacer"></span>
+              `}
+        </div>
+        ${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'
+          ? html`
+              <paper-input
+                label="${actionConfig.label} Navigation Path"
+                .value="${config[actionConfig.key].navigation_path ? config[actionConfig.key].navigation_path : ''}"
+                editable
+                .configObject=${config}
+                .actionKey=${actionConfig.key}
+                .actionAttribute=${'navigation_path'}
+                @value-changed=${this._updateAction}
+              ></paper-input>
+            `
+          : ''}
+        ${config[actionConfig.key] && config[actionConfig.key].action === 'url'
+          ? html`
+              <paper-input
+                label="${actionConfig.label} URL"
+                .value="${config[actionConfig.key].url_path ? config[actionConfig.key].url_path : ''}"
+                editable
+                .configObject=${config}
+                .actionKey=${actionConfig.key}
+                .actionAttribute=${'url_path'}
+                @value-changed=${this._updateAction}
+              ></paper-input>
+            `
+          : ''}
+        ${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'
+          ? html`
+              <paper-input
+                label="${actionConfig.label} Service"
+                .value="${config[actionConfig.key].service ? config[actionConfig.key].service : ''}"
+                editable
+                .configObject=${config}
+                .actionKey=${actionConfig.key}
+                .actionAttribute=${'service'}
+                @value-changed=${this._updateAction}
+              ></paper-input>
+            `
+          : ''}
+      </div>
     `;
   }
 
@@ -190,115 +313,14 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
         ${options.show
           ? html`
               <div class="value">
-                ${actionConfigs.map(
-                  actionConfig => html`
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      <label class="select-label">${actionConfig.label} Action</label>
-                      <select
-                        class="editor-select"
-                        @change=${this._updateAction}
-                        .configObject=${config}
-                        .actionKey=${actionConfig.key}
-                        .actionAttribute=${'action'}
-                      >
-                        <option value="" ?selected=${!(config[actionConfig.key] && config[actionConfig.key].action)}>
-                          none
-                        </option>
-                        <option
-                          value="more-info"
-                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'more-info'}
-                        >
-                          more-info
-                        </option>
-                        <option
-                          value="toggle"
-                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'toggle'}
-                        >
-                          toggle
-                        </option>
-                        <option
-                          value="navigate"
-                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'}
-                        >
-                          navigate
-                        </option>
-                        <option
-                          value="url"
-                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'url'}
-                        >
-                          url
-                        </option>
-                        <option
-                          value="call-service"
-                          ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'}
-                        >
-                          call-service
-                        </option>
-                      </select>
-                      ${config[actionConfig.key]
-                        ? html`
-                            <ha-icon
-                              class="ha-icon-large"
-                              icon="mdi:close"
-                              @click=${this._updateAction}
-                              .value=${''}
-                              .configObject=${config}
-                              .actionKey=${actionConfig.key}
-                              .actionAttribute=${'action'}
-                            ></ha-icon>
-                          `
-                        : ''}
-                    </div>
-                    ${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'
-                      ? html`
-                          <paper-input
-                            label="${actionConfig.label} Navigation Path"
-                            .value="${config[actionConfig.key].navigation_path
-                              ? config[actionConfig.key].navigation_path
-                              : ''}"
-                            editable
-                            .configObject=${config}
-                            .actionKey=${actionConfig.key}
-                            .actionAttribute=${'navigation_path'}
-                            @value-changed=${this._updateAction}
-                          ></paper-input>
-                        `
-                      : ''}
-                    ${config[actionConfig.key] && config[actionConfig.key].action === 'url'
-                      ? html`
-                          <paper-input
-                            label="${actionConfig.label} URL"
-                            .value="${config[actionConfig.key].url_path ? config[actionConfig.key].url_path : ''}"
-                            editable
-                            .configObject=${config}
-                            .actionKey=${actionConfig.key}
-                            .actionAttribute=${'url_path'}
-                            @value-changed=${this._updateAction}
-                          ></paper-input>
-                        `
-                      : ''}
-                    ${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'
-                      ? html`
-                          <paper-input
-                            label="${actionConfig.label} Service"
-                            .value="${config[actionConfig.key].service ? config[actionConfig.key].service : ''}"
-                            editable
-                            .configObject=${config}
-                            .actionKey=${actionConfig.key}
-                            .actionAttribute=${'service'}
-                            @value-changed=${this._updateAction}
-                          ></paper-input>
-                        `
-                      : ''}
-                  `,
-                )}
+                ${actionConfigs.map(actionConfig => this._renderFieldAction(actionConfig, config))}
               </div>
             `
           : ''}
@@ -316,10 +338,10 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     for (const config of this._configArray) {
       const index = this._configArray.indexOf(config);
       valueElementArray.push(html`
-        <div class="sub-category" style="display: flex; flex-direction: row; align-items: center;">
-          <div style="display: flex; align-items: center; flex-direction: column;">
+        <div class="sub-category entity-row field-card entity-card">
+          <div class="entity-toggle">
             <div
-              style="font-size: 10px; margin-bottom: -8px; opacity: 0.5;"
+              class="entity-meta-toggle"
               @click=${this._toggleThing}
               .options=${options.options.entities[index]}
               .optionsTarget=${options.options.entities}
@@ -330,12 +352,13 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
             <ha-icon
               icon="mdi:chevron-${options.options.entities[index].show ? 'up' : 'down'}"
               @click=${this._toggleThing}
+              class="chevron entity-chevron"
               .options=${options.options.entities[index]}
               .optionsTarget=${options.options.entities}
               .index=${index}
             ></ha-icon>
           </div>
-          <div class="value" style="flex-grow: 1;">
+          <div class="value entity-main-field">
             <paper-input
               label="Entity"
               @value-changed=${this._valueChanged}
@@ -345,50 +368,52 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
             >
             </paper-input>
           </div>
-          ${index !== 0
-            ? html`
-                <ha-icon
-                  class="ha-icon-large"
-                  icon="mdi:arrow-up"
-                  @click=${this._moveEntity}
-                  .configDirection=${'up'}
-                  .configArray=${this._config!.entities}
-                  .arrayAttribute=${'entities'}
-                  .arraySource=${this._config}
-                  .index=${index}
-                ></ha-icon>
-              `
-            : html`
-                <ha-icon icon="mdi:arrow-up" style="opacity: 25%;" class="ha-icon-large"></ha-icon>
-              `}
-          ${index !== this._configArray.length - 1
-            ? html`
-                <ha-icon
-                  class="ha-icon-large"
-                  icon="mdi:arrow-down"
-                  @click=${this._moveEntity}
-                  .configDirection=${'down'}
-                  .configArray=${this._config!.entities}
-                  .arrayAttribute=${'entities'}
-                  .arraySource=${this._config}
-                  .index=${index}
-                ></ha-icon>
-              `
-            : html`
-                <ha-icon icon="mdi:arrow-down" style="opacity: 25%;" class="ha-icon-large"></ha-icon>
-              `}
-          <ha-icon
-            class="ha-icon-large"
-            icon="mdi:close"
-            @click=${this._removeEntity}
-            .configAttribute=${'entity'}
-            .configArray=${'entities'}
-            .configIndex=${index}
-          ></ha-icon>
+          <div class="stack-actions icon-group">
+            ${index !== 0
+              ? html`
+                  <ha-icon
+                    class="ha-icon-large"
+                    icon="mdi:arrow-up"
+                    @click=${this._moveEntity}
+                    .configDirection=${'up'}
+                    .configArray=${this._config!.entities}
+                    .arrayAttribute=${'entities'}
+                    .arraySource=${this._config}
+                    .index=${index}
+                  ></ha-icon>
+                `
+              : html`
+                  <ha-icon icon="mdi:arrow-up" class="ha-icon-large muted-icon"></ha-icon>
+                `}
+            ${index !== this._configArray.length - 1
+              ? html`
+                  <ha-icon
+                    class="ha-icon-large"
+                    icon="mdi:arrow-down"
+                    @click=${this._moveEntity}
+                    .configDirection=${'down'}
+                    .configArray=${this._config!.entities}
+                    .arrayAttribute=${'entities'}
+                    .arraySource=${this._config}
+                    .index=${index}
+                  ></ha-icon>
+                `
+              : html`
+                  <ha-icon icon="mdi:arrow-down" class="ha-icon-large muted-icon"></ha-icon>
+                `}
+            <ha-icon
+              class="ha-icon-large"
+              icon="mdi:close"
+              @click=${this._removeEntity}
+              .configAttribute=${'entity'}
+              .configArray=${'entities'}
+              .configIndex=${index}
+            ></ha-icon>
+          </div>
         </div>
         ${options.options.entities[index].show
           ? html`
-              <div class="options">
+              <div class="options nested-options">
                 ${this._createBarElement(index)} ${this._createValueElement(index)}
                 ${this._createPositionsElement(index)} ${this._createSeverityElement(index)}
                 ${this._createAnimationElement(index)} ${this._createActionsElement(index)}
@@ -412,15 +437,15 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
         ${options.show
           ? html`
-              <div class="card-background" style="max-height: 400px; overflow: auto;">
+              <div class="card-background section-scroll">
                 ${this._createEntitiesValues()}
-                <div class="sub-category" style="display: flex; flex-direction: column; align-items: flex-end;">
+                <div class="sub-category add-row">
                   <ha-fab
                     mini
                     icon="mdi:plus"
@@ -443,29 +468,26 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     }
     const options = this._options.appearance;
     return html`
+      <div class="card-config">
         <div class="option" @click=${this._toggleThing} .options=${options} .optionsTarget=${this._options}>
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon
-              .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`}
-              style="margin-left: auto;"
-            ></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
-        ${
-          options.show
-            ? html`
-                <div class="card-background">
-                  ${this._createCardElement()} ${this._createBarElement(null)} ${this._createValueElement(null)}
-                  ${this._createPositionsElement(null)} ${this._createSeverityElement(null)}
-                  ${this._createAnimationElement(null)} ${this._createActionsElement(null)}
-                </div>
-              `
-            : ''
-        }
-      </div>`;
+        ${options.show
+          ? html`
+              <div class="card-background">
+                ${this._createCardElement()} ${this._createBarElement(null)} ${this._createValueElement(null)}
+                ${this._createPositionsElement(null)} ${this._createSeverityElement(null)}
+                ${this._createAnimationElement(null)} ${this._createActionsElement(null)}
+              </div>
+            `
+          : ''}
+      </div>
+    `;
   }
 
   private _createBarElement(index): TemplateResult {
@@ -489,7 +511,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
@@ -594,7 +616,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
@@ -699,19 +721,19 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
         ${options.show
           ? html`
-              <div class="card-background" style="overflow: auto; max-height: 420px;">
+              <div class="card-background section-scroll severity-scroll">
                 ${arrayLength > 0
                   ? html`
                       ${this._createSeverityValues(index)}
                     `
                   : ''}
-                <div class="sub-category" style="display: flex; flex-direction: column; align-items: flex-end;">
+                <div class="sub-category add-row">
                   <ha-fab mini icon="mdi:plus" @click=${this._addSeverity} .index=${index}></ha-fab>
                 </div>
               </div>
@@ -732,9 +754,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     for (const severity of config.severity) {
       const severityIndex = config.severity.indexOf(severity);
       severityValuesArray.push(html`
-        <div class="sub-category" style="display: flex; flex-direction: row; align-items: center;">
-          <div class="value">
-            <div style="display:flex;">
+        <div class="sub-category severity-row field-card">
+          <div class="value severity-fields">
+            <div class="inline-fields">
               <paper-input
                 label="From"
                 type="number"
@@ -756,7 +778,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                 @value-changed=${this._updateSeverity}
               ></paper-input>
             </div>
-            <div style="display:flex;">
+            <div class="inline-fields">
               <paper-input
                 label="Color"
                 .value="${severity.color ? severity.color : ''}"
@@ -776,31 +798,20 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                 @value-changed=${this._updateSeverity}
               ></paper-input>
             </div>
-            ${severity.hide
-              ? html`
-                  <ha-switch
-                    checked
-                    .severityAttribute=${'hide'}
-                    .index=${index}
-                    .severityIndex=${severityIndex}
-                    .value=${!severity.hide}
-                    @change=${this._updateSeverity}
-                    >Hide</ha-switch
-                  >
-                `
-              : html`
-                  <ha-switch
-                    unchecked
-                    .severityAttribute=${'hide'}
-                    .index=${index}
-                    .severityIndex=${severityIndex}
-                    .value=${!severity.hide}
-                    @change=${this._updateSeverity}
-                    >Hide</ha-switch
-                  >
-                `}
+            <div class="toggle-card compact-toggle">
+              <ha-formfield label="Hide">
+                <ha-switch
+                  ?checked=${!!severity.hide}
+                  .severityAttribute=${'hide'}
+                  .index=${index}
+                  .severityIndex=${severityIndex}
+                  .value=${!severity.hide}
+                  @change=${this._updateSeverity}
+                ></ha-switch>
+              </ha-formfield>
+            </div>
           </div>
-          <div style="display: flex;">
+          <div class="stack-actions icon-group">
             ${severityIndex !== 0
               ? html`
                   <ha-icon
@@ -813,7 +824,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                   ></ha-icon>
                 `
               : html`
-                  <ha-icon icon="mdi:arrow-up" style="opacity: 25%;" class="ha-icon-large"></ha-icon>
+                  <ha-icon icon="mdi:arrow-up" class="ha-icon-large muted-icon"></ha-icon>
                 `}
             ${severityIndex !== config.severity.length - 1
               ? html`
@@ -827,7 +838,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                   ></ha-icon>
                 `
               : html`
-                  <ha-icon icon="mdi:arrow-down" style="opacity: 25%;" class="ha-icon-large"></ha-icon>
+                  <ha-icon icon="mdi:arrow-down" class="ha-icon-large muted-icon"></ha-icon>
                 `}
             <ha-icon
               class="ha-icon-large"
@@ -861,7 +872,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
@@ -897,51 +908,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                     <option value="horizontal" ?selected=${config.stack === 'horizontal'}>horizontal</option>
                   </select>
                 </div>
-                <div>
-                  ${config.entity_row
-                    ? html`
-                        <ha-switch
-                          checked
-                          .configAttribute=${'entity_row'}
-                          .configObject=${config}
-                          .value=${!config.entity_row}
-                          @change=${this._valueChanged}
-                          >Entity Row</ha-switch
-                        >
-                      `
-                    : html`
-                        <ha-switch
-                          unchecked
-                          .configAttribute=${'entity_row'}
-                          .configObject=${config}
-                          .value=${!config.entity_row}
-                          @change=${this._valueChanged}
-                          >Entity Row</ha-switch
-                        >
-                      `}
-                </div>
-                <div>
-                  ${config.entity_config
-                    ? html`
-                        <ha-switch
-                          checked
-                          .configAttribute=${'entity_config'}
-                          .configObject=${config}
-                          .value=${!config.entity_config}
-                          @change=${this._valueChanged}
-                          >Entity Config</ha-switch
-                        >
-                      `
-                    : html`
-                        <ha-switch
-                          unchecked
-                          .configAttribute=${'entity_config'}
-                          .configObject=${config}
-                          .value=${!config.entity_config}
-                          @change=${this._valueChanged}
-                          >Entity Config</ha-switch
-                        >
-                      `}
+                <div class="toggle-grid">
+                  ${this._renderToggleField('Entity Row', config, 'entity_row')}
+                  ${this._renderToggleField('Entity Config', config, 'entity_config')}
                 </div>
               </div>
             `
@@ -1040,13 +1009,13 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
         ${options.show
           ? html`
-              ${this._createPositionsValues(index)}
+              <div class="positions-grid">${this._createPositionsValues(index)}</div>
             `
           : ``}
       </div>
@@ -1079,55 +1048,17 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           <div class="row">
             <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
             <div class="title">${options.name}</div>
-            <ha-icon .icon=${options.show ? `mdi:chevron-up` : `mdi:chevron-down`} style="margin-left: auto;"></ha-icon>
+            ${this._renderChevron(options.show)}
           </div>
           <div class="secondary">${options.secondary}</div>
         </div>
         ${options.show
           ? html`
               <div class="value">
-                ${config.limit_value
-                  ? html`
-                      <ha-switch
-                        checked
-                        .configAttribute=${'limit_value'}
-                        .configObject=${config}
-                        .value=${!config.limit_value}
-                        @change=${this._valueChanged}
-                        >Limit Value</ha-switch
-                      >
-                    `
-                  : html`
-                      <ha-switch
-                        unchecked
-                        .configObject=${config}
-                        .configAttribute=${'limit_value'}
-                        .value=${!config.limit_value}
-                        @change=${this._valueChanged}
-                        >Limit Value</ha-switch
-                      >
-                    `}
-                ${config.complementary
-                  ? html`
-                      <ha-switch
-                        checked
-                        .configAttribute=${'complementary'}
-                        .configObject=${config}
-                        .value=${!config.complementary}
-                        @change=${this._valueChanged}
-                        >Complementary</ha-switch
-                      >
-                    `
-                  : html`
-                      <ha-switch
-                        unchecked
-                        .configObject=${config}
-                        .configAttribute=${'complementary'}
-                        .value=${!config.complementary}
-                        @change=${this._valueChanged}
-                        >Complementary</ha-switch
-                      >
-                    `}
+                <div class="toggle-grid">
+                  ${this._renderToggleField('Limit Value', config, 'limit_value')}
+                  ${this._renderToggleField('Complementary', config, 'complementary')}
+                </div>
                 <paper-input
                   class="value-number"
                   label="Decimal"
@@ -1195,7 +1126,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config || !this.hass) {
       return;
     }
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
     const configObject = target.configObject;
     const actionKey = target.actionKey;
     const actionAttribute = target.actionAttribute;
@@ -1223,16 +1154,17 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _toggleThing(ev): void {
-    const options = ev.target.options;
+    const target = ev.currentTarget || ev.target;
+    const options = target.options;
     const show = !options.show;
-    if (ev.target.optionsTarget) {
-      if (Array.isArray(ev.target.optionsTarget)) {
-        for (const options of ev.target.optionsTarget) {
+    if (target.optionsTarget) {
+      if (Array.isArray(target.optionsTarget)) {
+        for (const options of target.optionsTarget) {
           options.show = false;
         }
       } else {
-        for (const [key] of Object.entries(ev.target.optionsTarget)) {
-          ev.target.optionsTarget[key].show = false;
+        for (const [key] of Object.entries(target.optionsTarget)) {
+          target.optionsTarget[key].show = false;
         }
       }
     }
@@ -1244,7 +1176,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config || !this.hass) {
       return;
     }
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
     let newObject;
     if (target.configAddObject) {
       newObject = target.configAddObject;
@@ -1261,7 +1193,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config || !this.hass) {
       return;
     }
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
     let newArray = target.configArray.slice();
     if (target.configDirection == 'up') newArray = arrayMove(newArray, target.index, target.index - 1);
     else if (target.configDirection == 'down') newArray = arrayMove(newArray, target.index, target.index + 1);
@@ -1273,7 +1205,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config || !this.hass) {
       return;
     }
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
     const entitiesArray: BarCardConfig[] = [];
     let index = 0;
     for (const config of this._configArray) {
@@ -1291,7 +1223,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config || !this.hass) {
       return;
     }
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
 
     let severityArray;
     if (target.index === null) {
@@ -1321,7 +1253,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config || !this.hass) {
       return;
     }
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
 
     let severityArray;
     if (target.index === null) {
@@ -1350,7 +1282,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config || !this.hass) {
       return;
     }
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
 
     let severityArray;
     if (target.index === null) {
@@ -1386,7 +1318,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _updateSeverity(ev): void {
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
 
     let severityArray;
     if (target.index === null) {
@@ -1422,7 +1354,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config || !this.hass) {
       return;
     }
-    const target = ev.target;
+    const target = ev.currentTarget || ev.target;
     if (target.configObject[target.configAttribute] == target.value) {
       return;
     }
@@ -1437,7 +1369,6 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         if (target.ignoreNull == true) return;
         delete target.configObject[target.configAttribute];
       } else {
-        console.log(target.configObject);
         target.configObject[target.configAttribute] = target.value;
       }
     }
@@ -1447,61 +1378,76 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
 
   static get styles(): CSSResult {
     return css`
+      .editor-shell {
+        display: grid;
+        gap: 16px;
+      }
       .option {
-        padding: 4px 0px;
+        padding: 14px 16px;
         cursor: pointer;
+        border-radius: 14px;
+        background: var(--ha-card-background, var(--paper-card-background-color));
+        border: 1px solid var(--divider-color);
+        box-shadow: var(--ha-card-box-shadow, none);
       }
       .options {
         background: var(--primary-background-color);
-        border-radius: var(--ha-card-border-radius);
-        cursor: pointer;
-        padding: 8px;
+        border-radius: 14px;
+        padding: 12px;
+        margin-top: 10px;
       }
       .sub-category {
         cursor: pointer;
+        border-radius: 12px;
       }
       .row {
         display: flex;
-        margin-bottom: -14px;
+        align-items: center;
+        gap: 12px;
         pointer-events: none;
-        margin-top: 14px;
+      }
+      .chevron {
+        margin-left: auto;
       }
       .title {
-        padding-left: 16px;
-        margin-top: -6px;
+        font-weight: 600;
         pointer-events: none;
       }
       .secondary {
-        padding-left: 40px;
+        padding-left: 36px;
         color: var(--secondary-text-color);
+        margin-top: 4px;
         pointer-events: none;
       }
       .value {
-        padding: 0px 8px;
+        padding: 10px 8px 2px;
+        display: grid;
+        gap: 10px;
       }
       .value-container {
-        padding: 0px 8px;
-        transition: all 0.5s ease-in-out;
-      }
-      .value-container:target {
-        height: 50px;
+        padding: 10px 8px 2px;
+        display: grid;
+        gap: 10px;
       }
       .value-number {
-        width: 100px;
+        max-width: 160px;
       }
       ha-fab {
         margin: 8px;
       }
       ha-switch {
-        padding: 16px 0;
+        padding: 6px 0;
       }
       .card-background {
-        background: var(--paper-card-background-color);
-        border-radius: var(--ha-card-border-radius);
-        padding: 8px;
+        background: var(--ha-card-background, var(--paper-card-background-color));
+        border-radius: 16px;
+        padding: 12px;
+        border: 1px solid var(--divider-color);
+        margin-top: 10px;
       }
       .category {
         background: #0000;
+        margin-top: 8px;
       }
       .ha-icon-large {
         cursor: pointer;
@@ -1515,13 +1461,142 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         border-radius: 6px;
         color: var(--primary-text-color);
         padding: 8px;
-        margin: 6px 0 10px;
+        margin: 6px 0 0;
       }
       .select-label {
         display: block;
         color: var(--secondary-text-color);
         font-size: 12px;
-        margin-top: 10px;
+        margin-bottom: 4px;
+      }
+      .card-config {
+        display: block;
+      }
+      .nested-options {
+        margin: 10px 0 0 12px;
+      }
+      .field-card {
+        background: color-mix(
+          in srgb,
+          var(--secondary-background-color, var(--primary-background-color)) 78%,
+          transparent
+        );
+        border: 1px solid var(--divider-color);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .entity-card,
+      .severity-row,
+      .action-card {
+        margin-bottom: 10px;
+      }
+      .entity-row,
+      .severity-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 0;
+      }
+      .entity-toggle {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 32px;
+      }
+      .entity-meta-toggle {
+        font-size: 10px;
+        line-height: 1;
+        opacity: 0.6;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 4px;
+      }
+      .entity-main-field {
+        min-width: 0;
+      }
+      .action-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
+        align-items: end;
+        gap: 8px;
+      }
+      .action-spacer {
+        width: 24px;
+        height: 24px;
+      }
+      .clear-icon {
+        align-self: end;
+      }
+      .positions-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px 12px;
+      }
+      .inline-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .stack-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+      }
+      .icon-group {
+        gap: 4px;
+        padding-left: 8px;
+        border-left: 1px solid var(--divider-color);
+      }
+      .toggle-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+      }
+      .toggle-card {
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--primary-background-color) 70%, transparent);
+        border: 1px solid var(--divider-color);
+      }
+      .compact-toggle {
+        max-width: 140px;
+      }
+      .severity-fields {
+        padding: 0;
+      }
+      .muted-icon {
+        opacity: 0.25;
+      }
+      .add-row {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .section-scroll {
+        max-height: 420px;
+        overflow: auto;
+      }
+      .severity-scroll {
+        max-height: 460px;
+      }
+      @media (max-width: 600px) {
+        .entity-row,
+        .severity-row,
+        .action-row {
+          grid-template-columns: 1fr;
+        }
+        .entity-toggle,
+        .stack-actions {
+          justify-self: start;
+          align-items: flex-start;
+        }
+        .inline-fields {
+          grid-template-columns: 1fr;
+        }
+        .icon-group {
+          border-left: 0;
+          padding-left: 0;
+        }
       }
     `;
   }
