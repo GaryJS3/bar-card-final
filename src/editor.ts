@@ -103,6 +103,11 @@ interface EditorEventTarget extends EventTarget {
   ignoreNull?: boolean;
 }
 
+interface EditorChoiceOption {
+  label: string;
+  value: string;
+}
+
 @customElement('bar-card-editor')
 export class BarCardEditor extends LitElement implements LovelaceCardEditor {
   @property() public hass?: HomeAssistant;
@@ -291,6 +296,101 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     `;
   }
 
+  private _toInputValue(value: unknown): string {
+    return value === undefined || value === null ? '' : String(value);
+  }
+
+  private _renderConfigInput(
+    label: string,
+    configObject: EditorBarConfig | EditorAnimationConfig | EditorPositionsConfig | EditorActionConfig,
+    configAttribute: string,
+    value: unknown,
+    type = 'text',
+    configAdd?: string,
+  ): TemplateResult {
+    return html`
+      <div class="editor-field">
+        <label class="select-label">${label}</label>
+        <input
+          class="editor-input"
+          .value=${this._toInputValue(value)}
+          type=${type}
+          .configObject=${configObject}
+          .configAttribute=${configAttribute}
+          .configAdd=${configAdd}
+          @input=${this._valueChanged}
+        />
+      </div>
+    `;
+  }
+
+  private _renderSeverityInput(
+    label: string,
+    severityAttribute: keyof EditorSeverityConfig,
+    index: number | null,
+    severityIndex: number,
+    value: unknown,
+    type = 'text',
+  ): TemplateResult {
+    return html`
+      <div class="editor-field">
+        <label class="select-label">${label}</label>
+        <input
+          class="editor-input"
+          .value=${this._toInputValue(value)}
+          type=${type}
+          .severityAttribute=${severityAttribute}
+          .index=${index}
+          .severityIndex=${severityIndex}
+          @input=${this._updateSeverity}
+        />
+      </div>
+    `;
+  }
+
+  private _renderChoiceField(
+    label: string,
+    options: EditorChoiceOption[],
+    value: unknown,
+    configObject: EditorBarConfig | EditorAnimationConfig | EditorPositionsConfig | EditorActionConfig,
+    configAttribute: string,
+    ignoreNull = false,
+    configAdd?: string,
+  ): TemplateResult {
+    return html`
+      <div class="editor-field">
+        <label class="select-label">${label}</label>
+        <div class="choice-group">
+          ${options.map(
+            option => html`
+              <button
+                class="choice-button ${String(value || '') === option.value ? 'selected' : ''}"
+                type="button"
+                .value=${option.value}
+                .configObject=${configObject}
+                .configAttribute=${configAttribute}
+                .configAdd=${configAdd}
+                .ignoreNull=${ignoreNull}
+                @click=${this._valueChanged}
+              >
+                ${option.label}
+              </button>
+            `,
+          )}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderAddButton(label: string, icon: string, handler, index?: number | null): TemplateResult {
+    return html`
+      <button class="add-button" type="button" @click=${handler} .index=${index}>
+        <ha-icon .icon=${icon}></ha-icon>
+        <span>${label}</span>
+      </button>
+    `;
+  }
+
   private _renderToggleField(label: string, configObject, configAttribute: string): TemplateResult {
     const checked = !!configObject[configAttribute];
     return html`
@@ -315,46 +415,37 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _renderFieldAction(actionConfig, config): TemplateResult {
+    const actionValue = config[actionConfig.key] ? config[actionConfig.key].action : '';
     return html`
       <div class="field-card action-card">
-        <div class="action-row">
-          <label class="select-label">${actionConfig.label} Action</label>
-          <select
-            class="editor-select"
-            @change=${this._updateAction}
-            .configObject=${config}
-            .actionKey=${actionConfig.key}
-            .actionAttribute=${'action'}
-          >
-            <option value="" ?selected=${!(config[actionConfig.key] && config[actionConfig.key].action)}>none</option>
-            <option
-              value="more-info"
-              ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'more-info'}
-            >
-              more-info
-            </option>
-            <option
-              value="toggle"
-              ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'toggle'}
-            >
-              toggle
-            </option>
-            <option
-              value="navigate"
-              ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'}
-            >
-              navigate
-            </option>
-            <option value="url" ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'url'}
-              >url</option
-            >
-            <option
-              value="call-service"
-              ?selected=${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'}
-            >
-              call-service
-            </option>
-          </select>
+        <div class="action-stack">
+          <div class="editor-field">
+            <label class="select-label">${actionConfig.label} Action</label>
+            <div class="choice-group">
+              ${[
+                { label: 'None', value: '' },
+                { label: 'Info', value: 'more-info' },
+                { label: 'Toggle', value: 'toggle' },
+                { label: 'Navigate', value: 'navigate' },
+                { label: 'URL', value: 'url' },
+                { label: 'Service', value: 'call-service' },
+              ].map(
+                option => html`
+                  <button
+                    class="choice-button ${actionValue === option.value ? 'selected' : ''}"
+                    type="button"
+                    .value=${option.value}
+                    .configObject=${config}
+                    .actionKey=${actionConfig.key}
+                    .actionAttribute=${'action'}
+                    @click=${this._updateAction}
+                  >
+                    ${option.label}
+                  </button>
+                `,
+              )}
+            </div>
+          </div>
           ${config[actionConfig.key]
             ? html`
                 <ha-icon
@@ -373,41 +464,47 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         </div>
         ${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'
           ? html`
-              <paper-input
-                label="${actionConfig.label} Navigation Path"
-                .value="${config[actionConfig.key].navigation_path ? config[actionConfig.key].navigation_path : ''}"
-                editable
-                .configObject=${config}
-                .actionKey=${actionConfig.key}
-                .actionAttribute=${'navigation_path'}
-                @value-changed=${this._updateAction}
-              ></paper-input>
+              <div class="editor-field">
+                <label class="select-label">${actionConfig.label} Navigation Path</label>
+                <input
+                  class="editor-input"
+                  .value=${this._toInputValue(config[actionConfig.key].navigation_path)}
+                  .configObject=${config}
+                  .actionKey=${actionConfig.key}
+                  .actionAttribute=${'navigation_path'}
+                  @input=${this._updateAction}
+                />
+              </div>
             `
           : ''}
         ${config[actionConfig.key] && config[actionConfig.key].action === 'url'
           ? html`
-              <paper-input
-                label="${actionConfig.label} URL"
-                .value="${config[actionConfig.key].url_path ? config[actionConfig.key].url_path : ''}"
-                editable
-                .configObject=${config}
-                .actionKey=${actionConfig.key}
-                .actionAttribute=${'url_path'}
-                @value-changed=${this._updateAction}
-              ></paper-input>
+              <div class="editor-field">
+                <label class="select-label">${actionConfig.label} URL</label>
+                <input
+                  class="editor-input"
+                  .value=${this._toInputValue(config[actionConfig.key].url_path)}
+                  .configObject=${config}
+                  .actionKey=${actionConfig.key}
+                  .actionAttribute=${'url_path'}
+                  @input=${this._updateAction}
+                />
+              </div>
             `
           : ''}
         ${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'
           ? html`
-              <paper-input
-                label="${actionConfig.label} Service"
-                .value="${config[actionConfig.key].service ? config[actionConfig.key].service : ''}"
-                editable
-                .configObject=${config}
-                .actionKey=${actionConfig.key}
-                .actionAttribute=${'service'}
-                @value-changed=${this._updateAction}
-              ></paper-input>
+              <div class="editor-field">
+                <label class="select-label">${actionConfig.label} Service</label>
+                <input
+                  class="editor-input"
+                  .value=${this._toInputValue(config[actionConfig.key].service)}
+                  .configObject=${config}
+                  .actionKey=${actionConfig.key}
+                  .actionAttribute=${'service'}
+                  @input=${this._updateAction}
+                />
+              </div>
             `
           : ''}
       </div>
@@ -478,7 +575,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
               .optionsTarget=${options.options.entities}
               .index=${index}
             >
-              options
+              settings
             </div>
             <ha-icon
               icon="mdi:chevron-${options.options.entities[index].show ? 'up' : 'down'}"
@@ -490,14 +587,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
             ></ha-icon>
           </div>
           <div class="value entity-main-field">
-            <paper-input
-              label="Entity"
-              @value-changed=${this._valueChanged}
-              .configAttribute=${'entity'}
-              .configObject=${this._configArray[index]}
-              .value=${config.entity}
-            >
-            </paper-input>
+            ${this._renderConfigInput('Entity', this._configArray[index], 'entity', config.entity)}
             ${this._renderHelperText(this._getEntityHint(config))}
           </div>
           <div class="stack-actions icon-group">
@@ -580,14 +670,17 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                   ? this._createEntitiesValues()
                   : this._renderEmptyState('No entities yet', 'Add your first entity to start configuring bars.')}
                 <div class="sub-category add-row">
-                  <ha-fab
-                    mini
-                    icon="mdi:plus"
+                  <button
+                    class="add-button"
+                    type="button"
                     @click=${this._addEntity}
                     .configArray=${this._configArray}
                     .configAddValue=${'entity'}
                     .sourceArray=${this._config.entities}
-                  ></ha-fab>
+                  >
+                    <ha-icon .icon=${'mdi:plus'}></ha-icon>
+                    <span>Add entity</span>
+                  </button>
                 </div>
               </div>
             `
@@ -653,75 +746,19 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           ? html`
               <div class="value">
                 ${this._renderHelperText('Use CSS values like 40px, 100%, or theme colors to fine-tune the bar.')}
-                <div>
-                  <label class="select-label">Direction</label>
-                  <select
-                    class="editor-select"
-                    @change=${this._valueChanged}
-                    .configObject=${config}
-                    .configAttribute=${'direction'}
-                    .ignoreNull=${true}
-                  >
-                    <option value="right" ?selected=${!config.direction || config.direction === 'right'}>right</option>
-                    <option value="up" ?selected=${config.direction === 'up'}>up</option>
-                  </select>
-                  ${config.direction
-                    ? html`
-                        <ha-icon
-                          class="ha-icon-large"
-                          icon="mdi:close"
-                          @click=${this._valueChanged}
-                          .value=${''}
-                          .configAttribute=${'direction'}
-                          .configObject=${config}
-                        ></ha-icon>
-                      `
-                    : ''}
-                </div>
-                ${index !== null
-                  ? html`
-                      <paper-input
-                        label="Name"
-                        .value="${config.name ? config.name : ''}"
-                        editable
-                        .configAttribute=${'name'}
-                        .configObject=${config}
-                        @value-changed=${this._valueChanged}
-                      ></paper-input>
-                    `
-                  : ''}
-                <paper-input
-                  label="Icon"
-                  .value="${config.icon ? config.icon : ''}"
-                  editable
-                  .configAttribute=${'icon'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  label="Height"
-                  .value="${config.height ? config.height : ''}"
-                  editable
-                  .configAttribute=${'height'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  label="Width"
-                  .value="${config.width ? config.width : ''}"
-                  editable
-                  .configAttribute=${'width'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  label="Color"
-                  .value="${config.color ? config.color : ''}"
-                  editable
-                  .configAttribute=${'color'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
+                ${this._renderChoiceField(
+                  'Direction',
+                  [{ label: 'Right', value: 'right' }, { label: 'Up', value: 'up' }],
+                  config.direction || 'right',
+                  config,
+                  'direction',
+                  true,
+                )}
+                ${index !== null ? this._renderConfigInput('Name', config, 'name', config.name) : ''}
+                ${this._renderConfigInput('Icon', config, 'icon', config.icon)}
+                ${this._renderConfigInput('Height', config, 'height', config.height)}
+                ${this._renderConfigInput('Width', config, 'width', config.width)}
+                ${this._renderConfigInput('Color', config, 'color', config.color)}
               </div>
             `
           : ''}
@@ -760,75 +797,30 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
             ? html`
                 <div class="value">
                   ${this._renderHelperText('Animation can be turned on globally or per entity. Speed is in seconds.')}
-                  <div>
-                    <label class="select-label">State</label>
-                    <select
-                      class="editor-select"
-                      @change=${this._valueChanged}
-                      .configAttribute=${'state'}
-                      .configObject=${config.animation}
-                      .index=${index}
-                      .ignoreNull=${true}
-                    >
-                      <option value="on" ?selected=${config.animation.state === 'on'}>on</option>
-                      <option value="off" ?selected=${!config.animation.state || config.animation.state === 'off'}>
-                        off
-                      </option>
-                    </select>
-                    ${config.animation.state
-                      ? html`
-                          <ha-icon
-                            class="ha-icon-large"
-                            icon="mdi:close"
-                            @click=${this._valueChanged}
-                            .value=${''}
-                            .configAttribute=${'state'}
-                            .configObject=${config.animation}
-                            .index=${index}
-                          ></ha-icon>
-                        `
-                      : ''}
-                  </div>
-                  <paper-input
-                    label="Speed"
-                    .value="${config.animation.speed ? config.animation.speed : ''}"
-                    editable
-                    @value-changed=${this._valueChanged}
-                    .configAttribute=${'speed'}
-                    .configObject=${config.animation}
-                    .index=${index}
-                  ></paper-input>
+                  ${this._renderChoiceField(
+                    'State',
+                    [{ label: 'On', value: 'on' }, { label: 'Off', value: 'off' }],
+                    config.animation.state || 'off',
+                    config.animation,
+                    'state',
+                    true,
+                  )}
+                  ${this._renderConfigInput('Speed', config.animation, 'speed', config.animation.speed)}
                 </div>
               `
             : html`
                 <div class="value">
                   ${this._renderHelperText('Set a state to create the animation block, then fine-tune the speed.')}
-                  <div>
-                    <label class="select-label">State</label>
-                    <select
-                      class="editor-select"
-                      @change=${this._valueChanged}
-                      .configObject=${config}
-                      .configAttribute=${'state'}
-                      .configAdd=${'animation'}
-                      .index=${index}
-                      .ignoreNull=${true}
-                    >
-                      <option value="">select</option>
-                      <option value="on">on</option>
-                      <option value="off">off</option>
-                    </select>
-                  </div>
-                  <paper-input
-                    label="Speed"
-                    editable
-                    .value=${''}
-                    @value-changed=${this._valueChanged}
-                    .configAttribute=${'speed'}
-                    .configObject=${config}
-                    .configAdd=${'animation'}
-                    .index=${index}
-                  ></paper-input>
+                  ${this._renderChoiceField(
+                    'State',
+                    [{ label: 'On', value: 'on' }, { label: 'Off', value: 'off' }],
+                    '',
+                    config,
+                    'state',
+                    true,
+                    'animation',
+                  )}
+                  ${this._renderConfigInput('Speed', config, 'speed', '', 'text', 'animation')}
                 </div>
               `
           : ''}
@@ -874,7 +866,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                       'Add ranges to map values to colors, icons, or hide rules.',
                     )}
                 <div class="sub-category add-row">
-                  <ha-fab mini icon="mdi:plus" @click=${this._addSeverity} .index=${index}></ha-fab>
+                  ${this._renderAddButton('Add severity rule', 'mdi:plus', this._addSeverity, index)}
                 </div>
               </div>
             `
@@ -897,46 +889,12 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         <div class="sub-category severity-row field-card">
           <div class="value severity-fields">
             <div class="inline-fields">
-              <paper-input
-                label="From"
-                type="number"
-                .value="${severity.from || severity.from === 0 ? severity.from : ''}"
-                editable
-                .severityAttribute=${'from'}
-                .index=${index}
-                .severityIndex=${severityIndex}
-                @value-changed=${this._updateSeverity}
-              ></paper-input>
-              <paper-input
-                label="To"
-                type="number"
-                .value="${severity.to ? severity.to : ''}"
-                editable
-                .severityAttribute=${'to'}
-                .index=${index}
-                .severityIndex=${severityIndex}
-                @value-changed=${this._updateSeverity}
-              ></paper-input>
+              ${this._renderSeverityInput('From', 'from', index, severityIndex, severity.from, 'number')}
+              ${this._renderSeverityInput('To', 'to', index, severityIndex, severity.to, 'number')}
             </div>
             <div class="inline-fields">
-              <paper-input
-                label="Color"
-                .value="${severity.color ? severity.color : ''}"
-                editable
-                .severityAttribute=${'color'}
-                .index=${index}
-                .severityIndex=${severityIndex}
-                @value-changed=${this._updateSeverity}
-              ></paper-input>
-              <paper-input
-                label="Icon"
-                .value="${severity.icon ? severity.icon : ''}"
-                editable
-                .severityAttribute=${'icon'}
-                .index=${index}
-                .severityIndex=${severityIndex}
-                @value-changed=${this._updateSeverity}
-              ></paper-input>
+              ${this._renderSeverityInput('Color', 'color', index, severityIndex, severity.color)}
+              ${this._renderSeverityInput('Icon', 'icon', index, severityIndex, severity.icon)}
             </div>
             <div class="toggle-card compact-toggle">
               <ha-formfield label="Hide">
@@ -1021,35 +979,15 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                 ${this._renderHelperText(
                   'Card-level settings apply to the whole stack and work best when shared across entities.',
                 )}
-                <paper-input
-                  editable
-                  label="Header Title"
-                  .value="${config.title ? config.title : ''}"
-                  .configObject=${config}
-                  .configAttribute=${'title'}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  class="value-number"
-                  type="number"
-                  label="Columns"
-                  .value=${config.columns ? config.columns : ''}
-                  .configObject=${config}
-                  .configAttribute=${'columns'}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <div>
-                  <label class="select-label">Stack</label>
-                  <select
-                    class="editor-select"
-                    @change=${this._valueChanged}
-                    .configObject=${config}
-                    .configAttribute=${'stack'}
-                  >
-                    <option value="" ?selected=${!config.stack}>none</option>
-                    <option value="horizontal" ?selected=${config.stack === 'horizontal'}>horizontal</option>
-                  </select>
-                </div>
+                ${this._renderConfigInput('Header Title', config, 'title', config.title)}
+                ${this._renderConfigInput('Columns', config, 'columns', config.columns, 'number')}
+                ${this._renderChoiceField(
+                  'Stack',
+                  [{ label: 'None', value: '' }, { label: 'Horizontal', value: 'horizontal' }],
+                  config.stack,
+                  config,
+                  'stack',
+                )}
                 <div class="toggle-grid">
                   ${this._renderToggleField('Entity Row', config, 'entity_row')}
                   ${this._renderToggleField('Entity Config', config, 'entity_config')}
@@ -1081,19 +1019,19 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     for (const position of objectKeys) {
       if (config.positions[position]) {
         positionElementsArray.push(html`
-          <div class="value">
-            <label class="select-label">${position}</label>
-            <select
-              class="editor-select"
-              @change=${this._valueChanged}
-              .configAttribute=${position}
-              .configObject=${config.positions}
-              .ignoreNull=${true}
-            >
-              <option value="inside" ?selected=${config.positions[position] === 'inside'}>inside</option>
-              <option value="outside" ?selected=${config.positions[position] === 'outside'}>outside</option>
-              <option value="off" ?selected=${config.positions[position] === 'off'}>off</option>
-            </select>
+          <div class="value field-card compact-field-card">
+            ${this._renderChoiceField(
+              position,
+              [
+                { label: 'Inside', value: 'inside' },
+                { label: 'Outside', value: 'outside' },
+                { label: 'Off', value: 'off' },
+              ],
+              config.positions[position],
+              config.positions,
+              position,
+              true,
+            )}
             <ha-icon
               class="ha-icon-large"
               icon="mdi:close"
@@ -1106,19 +1044,19 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         `);
       } else {
         positionElementsArray.push(html`
-          <div class="value">
-            <label class="select-label">${position}</label>
-            <select
-              class="editor-select"
-              @change=${this._valueChanged}
-              .configAttribute=${position}
-              .configObject=${config.positions}
-            >
-              <option value="">default</option>
-              <option value="inside">inside</option>
-              <option value="outside">outside</option>
-              <option value="off">off</option>
-            </select>
+          <div class="value field-card compact-field-card">
+            ${this._renderChoiceField(
+              position,
+              [
+                { label: 'Default', value: '' },
+                { label: 'Inside', value: 'inside' },
+                { label: 'Outside', value: 'outside' },
+                { label: 'Off', value: 'off' },
+              ],
+              '',
+              config.positions,
+              position,
+            )}
           </div>
         `);
       }
@@ -1204,62 +1142,17 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                   ${this._renderToggleField('Limit Value', config, 'limit_value')}
                   ${this._renderToggleField('Complementary', config, 'complementary')}
                 </div>
-                <paper-input
-                  class="value-number"
-                  label="Decimal"
-                  type="number"
-                  .value="${config.decimal ? config.decimal : ''}"
-                  editable
-                  .configAttribute=${'decimal'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  class="value-number"
-                  type="number"
-                  label="Min"
-                  .value="${config.min ? config.min : ''}"
-                  editable
-                  .configAttribute=${'min'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  class="value-number"
-                  type="number"
-                  label="Max"
-                  .value="${config.max ? config.max : ''}"
-                  editable
-                  .configAttribute=${'max'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  class="value-number"
-                  type="number"
-                  label="Target"
-                  .value="${config.target ? config.target : ''}"
-                  editable
-                  .configAttribute=${'target'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  label="Unit of Measurement"
-                  .value="${config.unit_of_measurement ? config.unit_of_measurement : ''}"
-                  editable
-                  .configAttribute=${'unit_of_measurement'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
-                <paper-input
-                  label="Attribute"
-                  .value="${config.attribute ? config.attribute : ''}"
-                  editable
-                  .configAttribute=${'attribute'}
-                  .configObject=${config}
-                  @value-changed=${this._valueChanged}
-                ></paper-input>
+                ${this._renderConfigInput('Decimal', config, 'decimal', config.decimal, 'number')}
+                ${this._renderConfigInput('Min', config, 'min', config.min, 'number')}
+                ${this._renderConfigInput('Max', config, 'max', config.max, 'number')}
+                ${this._renderConfigInput('Target', config, 'target', config.target, 'number')}
+                ${this._renderConfigInput(
+                  'Unit of Measurement',
+                  config,
+                  'unit_of_measurement',
+                  config.unit_of_measurement,
+                )}
+                ${this._renderConfigInput('Attribute', config, 'attribute', config.attribute)}
               </div>
             `
           : ''}
@@ -1612,6 +1505,40 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         padding: 8px;
         margin: 6px 0 0;
       }
+      .editor-input {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        color: var(--primary-text-color);
+        padding: 10px 12px;
+        font: inherit;
+      }
+      .editor-field {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+      }
+      .choice-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .choice-button {
+        border: 1px solid var(--divider-color);
+        background: var(--card-background-color);
+        color: var(--primary-text-color);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .choice-button.selected {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+        color: var(--text-primary-color, #fff);
+      }
       .select-label {
         display: block;
         color: var(--secondary-text-color);
@@ -1695,6 +1622,10 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         width: 24px;
         height: 24px;
       }
+      .action-stack {
+        display: grid;
+        gap: 10px;
+      }
       .clear-icon {
         align-self: end;
       }
@@ -1735,6 +1666,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       .severity-fields {
         padding: 0;
       }
+      .compact-field-card {
+        padding: 10px;
+      }
       .muted-icon {
         opacity: 0.25;
       }
@@ -1748,6 +1682,18 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       }
       .severity-scroll {
         max-height: 460px;
+      }
+      .add-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--primary-color);
+        background: color-mix(in srgb, var(--primary-color) 16%, transparent);
+        color: var(--primary-text-color);
+        border-radius: 999px;
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
       }
       @media (max-width: 600px) {
         .entity-row,
