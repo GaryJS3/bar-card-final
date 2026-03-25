@@ -44,78 +44,72 @@ interface EditorBarConfig extends BaseEditorBarConfig {
   double_tap_action?: EditorActionConfig;
 }
 
-interface EditorOption {
-  icon: string;
-  name: string;
-  secondary: string;
-  show: boolean;
+type ActionKey = 'tap_action' | 'hold_action' | 'double_tap_action';
+type SectionKey = 'entities' | 'card' | 'bar' | 'value' | 'positions' | 'severity' | 'animation' | 'actions';
+type EditorConfigTarget = EditorBarConfig | EditorAnimationConfig | EditorPositionsConfig | EditorActionConfig;
+
+interface SectionState {
+  entities: boolean;
+  card: boolean;
+  bar: boolean;
+  value: boolean;
+  positions: boolean;
+  severity: boolean;
+  animation: boolean;
+  actions: boolean;
 }
 
-interface EditorEntityOptionGroup {
-  show: boolean;
-  options: {
-    positions: EditorOption;
-    bar: EditorOption;
-    value: EditorOption;
-    severity: EditorOption;
-    actions: EditorOption;
-    animation: EditorOption;
-  };
-}
-
-interface EditorOptionsState {
-  entities: EditorOption & {
-    options: {
-      entities: EditorEntityOptionGroup[];
-    };
-  };
-  appearance: EditorOption & {
-    options: {
-      positions: EditorOption;
-      bar: EditorOption;
-      value: EditorOption;
-      card: EditorOption;
-      severity: EditorOption;
-      animation: EditorOption;
-      actions: EditorOption;
-    };
-  };
-}
-
-interface EditorEventTarget extends EventTarget {
-  value?: string | number | boolean;
-  checked?: boolean;
-  configObject?: EditorBarConfig | EditorAnimationConfig | EditorPositionsConfig | EditorActionConfig;
-  configAttribute?: string;
-  configAdd?: string;
-  configAddObject?: EditorBarConfig;
-  configAddValue?: string;
-  configArray?: EditorBarConfig[];
-  configDirection?: string;
-  configIndex?: number;
-  index?: number | null;
-  severityIndex?: number;
-  severityAttribute?: keyof EditorSeverityConfig;
-  actionKey?: keyof EditorBarConfig;
-  actionAttribute?: keyof EditorActionConfig;
-  options?: EditorOption | EditorEntityOptionGroup;
-  optionsTarget?: EditorOptionsState | EditorEntityOptionGroup[] | Record<string, EditorOption>;
-  ignoreNull?: boolean;
-}
-
-interface EditorChoiceOption {
+interface ChoiceOption {
   label: string;
   value: string;
 }
+
+const DIRECTION_OPTIONS: ChoiceOption[] = [{ label: 'Right', value: 'right' }, { label: 'Up', value: 'up' }];
+
+const POSITION_OPTIONS: ChoiceOption[] = [
+  { label: 'Default', value: '' },
+  { label: 'Inside', value: 'inside' },
+  { label: 'Outside', value: 'outside' },
+  { label: 'Off', value: 'off' },
+];
+
+const POSITION_KEYS = ['icon', 'indicator', 'name', 'minmax', 'value'];
+
+const ACTION_OPTIONS: ChoiceOption[] = [
+  { label: 'None', value: '' },
+  { label: 'Info', value: 'more-info' },
+  { label: 'Toggle', value: 'toggle' },
+  { label: 'Navigate', value: 'navigate' },
+  { label: 'URL', value: 'url' },
+  { label: 'Service', value: 'call-service' },
+];
+
+const ACTION_LABELS: Record<ActionKey, string> = {
+  tap_action: 'Tap',
+  hold_action: 'Hold',
+  double_tap_action: 'Double tap',
+};
+
+const DEFAULT_SECTIONS: SectionState = {
+  entities: true,
+  card: true,
+  bar: false,
+  value: false,
+  positions: false,
+  severity: false,
+  animation: false,
+  actions: false,
+};
 
 @customElement('bar-card-editor')
 export class BarCardEditor extends LitElement implements LovelaceCardEditor {
   @property() public hass?: HomeAssistant;
   @property() private _config: EditorBarConfig = {};
   @property() private _toggle?: boolean;
+
   private _configArray: EditorBarConfig[] = [];
-  private _entityOptionsArray: EditorEntityOptionGroup[] = [];
-  private _options!: EditorOptionsState;
+  private _sections: SectionState = { ...DEFAULT_SECTIONS };
+  private _entityOpen: boolean[] = [];
 
   protected shouldUpdate(changedProps: PropertyValues): boolean {
     return hasConfigOrEntitiesChanged(this, changedProps, true);
@@ -123,167 +117,494 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
 
   public setConfig(config: BarCardConfig): void {
     this._config = { ...config };
-    this._configArray = [];
-    this._entityOptionsArray = [];
 
-    if (!config.entity && !config.entities) {
-      this._config.entity = 'none';
+    if (!this._config.entity && !this._config.entities) {
+      this._config.entities = [{ entity: '' }];
     }
+
     if (this._config.entity) {
-      this._configArray.push({ entity: config.entity });
-      this._config.entities = [{ entity: config.entity }];
+      this._config.entities = [{ entity: this._config.entity }];
       delete this._config.entity;
     }
 
-    this._configArray = createEditorConfigArray(this._config);
-
-    if (this._config.animation) {
-      if (Object.entries(this._config.animation).length === 0) {
-        delete this._config.animation;
-        this._emitConfigChanged();
-      }
-    }
-    if (this._config.positions) {
-      if (Object.entries(this._config.positions).length === 0) {
-        delete this._config.positions;
-        this._emitConfigChanged();
-      }
+    this._configArray = createEditorConfigArray(this._config) as EditorBarConfig[];
+    if (this._configArray.length === 0) {
+      this._configArray = [{ entity: '' }];
     }
 
-    for (const entityConfig of this._configArray) {
-      if (entityConfig.animation) {
-        if (Object.entries(entityConfig.animation).length === 0) {
-          delete entityConfig.animation;
-        }
-      }
-      if (entityConfig.positions) {
-        if (Object.entries(entityConfig.positions).length === 0) {
-          delete entityConfig.positions;
-        }
-      }
-    }
-    this._config.entities = this._configArray;
-    this._emitConfigChanged();
-
-    const barOptions = {
-      icon: 'format-list-numbered',
-      name: 'Bar',
-      secondary: 'Bar settings.',
-      show: false,
-    };
-
-    const valueOptions = {
-      icon: 'numeric',
-      name: 'Value',
-      secondary: 'Value settings.',
-      show: false,
-    };
-
-    const cardOptions = {
-      icon: 'card-bulleted',
-      name: 'Card',
-      secondary: 'Card settings.',
-      show: false,
-    };
-
-    const positionsOptions = {
-      icon: 'arrow-expand-horizontal',
-      name: 'Positions',
-      secondary: 'Set positions of card elements.',
-      show: false,
-    };
-
-    const actionsOptions = {
-      icon: 'gesture-tap',
-      name: 'Actions',
-      secondary: 'Configure tap, hold and double tap actions.',
-      show: false,
-    };
-
-    const severityOptions = {
-      icon: 'exclamation-thick',
-      name: 'Severity',
-      secondary: 'Define bar colors based on value.',
-      show: false,
-    };
-
-    const animationOptions = {
-      icon: 'animation',
-      name: 'Animation',
-      secondary: 'Define animation settings.',
-      show: false,
-    };
-
-    const entityOptions = {
-      show: false,
-      options: {
-        positions: { ...positionsOptions },
-        bar: { ...barOptions },
-        value: { ...valueOptions },
-        severity: { ...severityOptions },
-        actions: { ...actionsOptions },
-        animation: { ...animationOptions },
-      },
-    };
-
-    this._configArray.forEach(() => {
-      this._entityOptionsArray.push({ ...entityOptions });
-    });
-    this._options = {
-      entities: {
-        icon: 'tune',
-        name: 'Entities',
-        secondary: 'Manage card entities.',
-        show: true,
-        options: {
-          entities: this._entityOptionsArray,
-        },
-      },
-      appearance: {
-        icon: 'palette',
-        name: 'Appearance',
-        secondary: 'Customize the global name, icon, etc.',
-        show: false,
-        options: {
-          positions: positionsOptions,
-          bar: barOptions,
-          value: valueOptions,
-          card: cardOptions,
-          severity: severityOptions,
-          animation: animationOptions,
-          actions: actionsOptions,
-        },
-      },
-    };
+    this._entityOpen = this._configArray.map((_, index) => index === 0);
+    this._sections = { ...DEFAULT_SECTIONS };
+    this._syncAndEmit();
   }
 
-  protected render(): TemplateResult | void {
+  protected render(): TemplateResult {
+    if (!this.hass) {
+      return html``;
+    }
+
     return html`
-      <div class="editor-shell">${this._createEntitiesElement()} ${this._createAppearanceElement()}</div>
+      <div class="editor-shell">
+        <div class="editor-note">
+          <div class="note-title">Rebuilt editor</div>
+          <div class="note-body">
+            This version intentionally uses simpler Home Assistant-style form patterns and fewer custom controls so it
+            renders reliably in the dialog.
+          </div>
+        </div>
+
+        ${this._renderPanel(
+          'entities',
+          'Entities',
+          'Manage card entities and per-entity overrides.',
+          this._renderEntitiesPanel(),
+        )}
+        ${this._renderPanel(
+          'card',
+          'Card Defaults',
+          'Apply shared card settings like title, columns, and entity row behavior.',
+          this._renderCardDefaults(),
+        )}
+        ${this._renderPanel(
+          'bar',
+          'Bar Defaults',
+          'Shared name, icon, size, color, and direction defaults for all entities.',
+          this._renderBarSettings(this._config, true),
+        )}
+        ${this._renderPanel(
+          'value',
+          'Value Defaults',
+          'Global formatting, min/max/target, and attribute defaults.',
+          this._renderValueSettings(this._config),
+        )}
+        ${this._renderPanel(
+          'positions',
+          'Position Defaults',
+          'Choose where icon, name, values, and indicators render by default.',
+          this._renderPositionsSettings(this._config),
+        )}
+        ${this._renderPanel(
+          'severity',
+          'Severity Defaults',
+          'Map ranges to colors, icons, or hidden states.',
+          this._renderSeveritySettings(this._config, null),
+        )}
+        ${this._renderPanel(
+          'animation',
+          'Animation Defaults',
+          'Set shared animation behavior for all bars.',
+          this._renderAnimationSettings(this._config),
+        )}
+        ${this._renderPanel(
+          'actions',
+          'Action Defaults',
+          'Configure shared tap, hold, and double-tap actions.',
+          this._renderActionSettings(this._config),
+        )}
+      </div>
     `;
   }
 
-  private _emitConfigChanged(): void {
-    fireEvent(this, 'config-changed', { config: this._config as BarCardConfig });
-  }
+  private _renderPanel(key: SectionKey, title: string, description: string, content: TemplateResult): TemplateResult {
+    const open = this._sections[key];
 
-  private _getEntityHint(config: EditorBarConfig): string {
-    if (!this.hass || !config.entity) {
-      return 'Choose an entity id to configure bar-specific settings.';
-    }
-
-    const stateObj = this.hass.states[config.entity];
-    if (!stateObj) {
-      return 'Entity not found in Home Assistant yet. Verify the entity id.';
-    }
-
-    const friendlyName = stateObj.attributes.friendly_name || config.entity;
-    return `${friendlyName}: ${stateObj.state}`;
-  }
-
-  private _renderHelperText(text: string): TemplateResult {
     return html`
-      <div class="helper-text">${text}</div>
+      <section class="panel">
+        <button class="panel-header" type="button" @click=${(): void => this._toggleSection(key)}>
+          <div>
+            <div class="panel-title">${title}</div>
+            <div class="panel-description">${description}</div>
+          </div>
+          <ha-icon .icon=${open ? 'mdi:chevron-up' : 'mdi:chevron-down'}></ha-icon>
+        </button>
+        ${open
+          ? html`
+              <div class="panel-body">${content}</div>
+            `
+          : html``}
+      </section>
+    `;
+  }
+
+  private _renderEntitiesPanel(): TemplateResult {
+    return html`
+      <div class="entity-list">
+        ${this._configArray.map((entityConfig, index) => this._renderEntityCard(entityConfig, index))}
+      </div>
+      <div class="toolbar end">
+        <button class="add-button" type="button" @click=${this._addEntity}>
+          <ha-icon .icon=${'mdi:plus'}></ha-icon>
+          <span>Add entity</span>
+        </button>
+      </div>
+    `;
+  }
+
+  private _renderEntityCard(config: EditorBarConfig, index: number): TemplateResult {
+    const isOpen = !!this._entityOpen[index];
+    const title = config.name || config.entity || `Entity ${index + 1}`;
+    const subtitle = this._getEntityHint(config);
+
+    return html`
+      <article class="entity-card">
+        <div class="entity-header">
+          <button class="entity-summary" type="button" @click=${(): void => this._toggleEntity(index)}>
+            <div class="entity-title-row">
+              <div class="entity-title">${title}</div>
+              <ha-icon .icon=${isOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'}></ha-icon>
+            </div>
+            <div class="entity-subtitle">${subtitle}</div>
+          </button>
+          <div class="icon-actions">
+            <button
+              class="icon-button"
+              type="button"
+              ?disabled=${index === 0}
+              @click=${(): void => this._moveEntity(index, -1)}
+            >
+              <ha-icon .icon=${'mdi:arrow-up'}></ha-icon>
+            </button>
+            <button
+              class="icon-button"
+              type="button"
+              ?disabled=${index === this._configArray.length - 1}
+              @click=${(): void => this._moveEntity(index, 1)}
+            >
+              <ha-icon .icon=${'mdi:arrow-down'}></ha-icon>
+            </button>
+            <button class="icon-button danger" type="button" @click=${(): void => this._removeEntity(index)}>
+              <ha-icon .icon=${'mdi:delete-outline'}></ha-icon>
+            </button>
+          </div>
+        </div>
+
+        ${isOpen
+          ? html`
+              <div class="entity-body">
+                ${this._renderEntityBasics(config)} ${this._renderSubheading('Bar')}
+                ${this._renderBarSettings(config, false)} ${this._renderSubheading('Value')}
+                ${this._renderValueSettings(config)} ${this._renderSubheading('Positions')}
+                ${this._renderPositionsSettings(config)} ${this._renderSubheading('Severity')}
+                ${this._renderSeveritySettings(config, index)} ${this._renderSubheading('Animation')}
+                ${this._renderAnimationSettings(config)} ${this._renderSubheading('Actions')}
+                ${this._renderActionSettings(config)}
+              </div>
+            `
+          : html``}
+      </article>
+    `;
+  }
+
+  private _renderEntityBasics(config: EditorBarConfig): TemplateResult {
+    return html`
+      <div class="group-grid two-col">
+        ${this._renderTextField('Entity ID', config.entity, (value): void => this._setField(config, 'entity', value))}
+        ${this._renderTextField('Friendly Name', config.name, (value): void => this._setField(config, 'name', value))}
+      </div>
+      ${this._renderHint(this._getEntityHint(config))}
+    `;
+  }
+
+  private _renderCardDefaults(): TemplateResult {
+    return html`
+      <div class="group-grid two-col">
+        ${this._renderTextField('Header Title', this._config.title, (value): void =>
+          this._setField(this._config, 'title', value),
+        )}
+        ${this._renderNumberField('Columns', this._config.columns, (value): void =>
+          this._setField(this._config, 'columns', value),
+        )}
+      </div>
+      ${this._renderChoiceField(
+        'Stack',
+        [{ label: 'None', value: '' }, { label: 'Horizontal', value: 'horizontal' }],
+        this._config.stack,
+        (value): void => this._setField(this._config, 'stack', value),
+      )}
+      <div class="toggle-grid">
+        ${this._renderCheckbox('Entity Row', !!this._config.entity_row, (checked): void =>
+          this._setBoolean(this._config, 'entity_row', checked),
+        )}
+        ${this._renderCheckbox('Entity Config', !!this._config.entity_config, (checked): void =>
+          this._setBoolean(this._config, 'entity_config', checked),
+        )}
+      </div>
+      ${this._renderHint(
+        'These settings are similar to the shared top-level controls used in Home Assistant card editors.',
+      )}
+    `;
+  }
+
+  private _renderBarSettings(config: EditorBarConfig, global: boolean): TemplateResult {
+    return html`
+      <div class="group-grid two-col">
+        ${global
+          ? html``
+          : this._renderTextField('Label', config.name, (value): void => this._setField(config, 'name', value))}
+        ${this._renderTextField('Icon', config.icon, (value): void => this._setField(config, 'icon', value))}
+        ${this._renderTextField('Height', config.height, (value): void => this._setField(config, 'height', value))}
+        ${this._renderTextField('Width', config.width, (value): void => this._setField(config, 'width', value))}
+        ${this._renderTextField('Color', config.color, (value): void => this._setField(config, 'color', value))}
+      </div>
+      ${this._renderChoiceField('Direction', DIRECTION_OPTIONS, config.direction || 'right', (value): void =>
+        this._setField(config, 'direction', value),
+      )}
+      ${this._renderHint(
+        'Use theme colors or CSS values. This is intentionally flatter and simpler than the previous custom layout.',
+      )}
+    `;
+  }
+
+  private _renderValueSettings(config: EditorBarConfig): TemplateResult {
+    return html`
+      <div class="toggle-grid">
+        ${this._renderCheckbox('Limit Value', !!config.limit_value, (checked): void =>
+          this._setBoolean(config, 'limit_value', checked),
+        )}
+        ${this._renderCheckbox('Complementary', !!config.complementary, (checked): void =>
+          this._setBoolean(config, 'complementary', checked),
+        )}
+      </div>
+      <div class="group-grid three-col">
+        ${this._renderNumberField('Decimal', config.decimal, (value): void => this._setField(config, 'decimal', value))}
+        ${this._renderNumberField('Min', config.min, (value): void => this._setField(config, 'min', value))}
+        ${this._renderNumberField('Max', config.max, (value): void => this._setField(config, 'max', value))}
+        ${this._renderNumberField('Target', config.target, (value): void => this._setField(config, 'target', value))}
+      </div>
+      <div class="group-grid two-col">
+        ${this._renderTextField('Unit of Measurement', config.unit_of_measurement, (value): void =>
+          this._setField(config, 'unit_of_measurement', value),
+        )}
+        ${this._renderTextField('Attribute', config.attribute, (value): void =>
+          this._setField(config, 'attribute', value),
+        )}
+      </div>
+      ${this._renderHint(
+        'Use YAML for advanced object-style min/max sources. The visual editor focuses on common number-based editing.',
+      )}
+    `;
+  }
+
+  private _renderPositionsSettings(config: EditorBarConfig): TemplateResult {
+    const positions = this._ensurePositions(config);
+
+    return html`
+      <div class="positions-grid">
+        ${POSITION_KEYS.map(position =>
+          this._renderChoiceField(position, POSITION_OPTIONS, positions[position] || '', (value): void => {
+            this._setPosition(config, position, value);
+          }),
+        )}
+      </div>
+      ${this._renderHint('This mirrors the compact segmented-choice pattern common in Home Assistant editors.')}
+    `;
+  }
+
+  private _renderSeveritySettings(config: EditorBarConfig, index: number | null): TemplateResult {
+    const severity = config.severity || [];
+
+    return html`
+      ${severity.length === 0
+        ? this._renderEmptyState('No severity rules yet', 'Add rules to map ranges to colors, icons, or hidden states.')
+        : html`
+            <div class="severity-list">
+              ${severity.map((rule, severityIndex) => this._renderSeverityRule(config, rule, severityIndex))}
+            </div>
+          `}
+      <div class="toolbar end">
+        <button class="add-button" type="button" @click=${(): void => this._addSeverity(config, index)}>
+          <ha-icon .icon=${'mdi:plus'}></ha-icon>
+          <span>Add severity rule</span>
+        </button>
+      </div>
+    `;
+  }
+
+  private _renderSeverityRule(
+    config: EditorBarConfig,
+    severity: EditorSeverityConfig,
+    severityIndex: number,
+  ): TemplateResult {
+    const rules = config.severity || [];
+
+    return html`
+      <div class="rule-card">
+        <div class="rule-header">
+          <div class="rule-title">Rule ${severityIndex + 1}</div>
+          <div class="icon-actions">
+            <button
+              class="icon-button"
+              type="button"
+              ?disabled=${severityIndex === 0}
+              @click=${(): void => this._moveSeverity(config, severityIndex, -1)}
+            >
+              <ha-icon .icon=${'mdi:arrow-up'}></ha-icon>
+            </button>
+            <button
+              class="icon-button"
+              type="button"
+              ?disabled=${severityIndex === rules.length - 1}
+              @click=${(): void => this._moveSeverity(config, severityIndex, 1)}
+            >
+              <ha-icon .icon=${'mdi:arrow-down'}></ha-icon>
+            </button>
+            <button
+              class="icon-button danger"
+              type="button"
+              @click=${(): void => this._removeSeverity(config, severityIndex)}
+            >
+              <ha-icon .icon=${'mdi:delete-outline'}></ha-icon>
+            </button>
+          </div>
+        </div>
+        <div class="group-grid two-col">
+          ${this._renderNumberField('From', severity.from, (value): void =>
+            this._setSeverityField(config, severityIndex, 'from', value),
+          )}
+          ${this._renderNumberField('To', severity.to, (value): void =>
+            this._setSeverityField(config, severityIndex, 'to', value),
+          )}
+          ${this._renderTextField('Color', severity.color, (value): void =>
+            this._setSeverityField(config, severityIndex, 'color', value),
+          )}
+          ${this._renderTextField('Icon', severity.icon, (value): void =>
+            this._setSeverityField(config, severityIndex, 'icon', value),
+          )}
+        </div>
+        ${this._renderCheckbox('Hide bar for this range', !!severity.hide, (checked): void =>
+          this._setSeverityBoolean(config, severityIndex, 'hide', checked),
+        )}
+      </div>
+    `;
+  }
+
+  private _renderAnimationSettings(config: EditorBarConfig): TemplateResult {
+    const animation = this._ensureAnimation(config);
+
+    return html`
+      ${this._renderChoiceField(
+        'Animation State',
+        [{ label: 'Off', value: 'off' }, { label: 'On', value: 'on' }],
+        animation.state || 'off',
+        (value): void => this._setAnimationField(config, 'state', value),
+      )}
+      <div class="group-grid two-col">
+        ${this._renderTextField('Speed (seconds)', animation.speed, (value): void =>
+          this._setAnimationField(config, 'speed', value),
+        )}
+      </div>
+    `;
+  }
+
+  private _renderActionSettings(config: EditorBarConfig): TemplateResult {
+    return html`
+      <div class="actions-list">
+        ${(['tap_action', 'hold_action', 'double_tap_action'] as ActionKey[]).map(actionKey =>
+          this._renderActionCard(config, actionKey),
+        )}
+      </div>
+      ${this._renderHint(
+        'This follows the same simple action selection flow used by many stable third-party cards: pick an action, then fill only the fields it needs.',
+      )}
+    `;
+  }
+
+  private _renderActionCard(config: EditorBarConfig, actionKey: ActionKey): TemplateResult {
+    const actionConfig = this._getAction(config, actionKey);
+    const action = actionConfig.action || '';
+    const label = ACTION_LABELS[actionKey];
+
+    return html`
+      <div class="rule-card">
+        <div class="rule-title">${label}</div>
+        ${this._renderChoiceField(`${label} action`, ACTION_OPTIONS, action, (value): void =>
+          this._setActionField(config, actionKey, 'action', value),
+        )}
+        ${action === 'navigate'
+          ? this._renderTextField('Navigation Path', actionConfig.navigation_path, (value): void =>
+              this._setActionField(config, actionKey, 'navigation_path', value),
+            )
+          : html``}
+        ${action === 'url'
+          ? this._renderTextField('URL', actionConfig.url_path, (value): void =>
+              this._setActionField(config, actionKey, 'url_path', value),
+            )
+          : html``}
+        ${action === 'call-service'
+          ? this._renderTextField('Service', actionConfig.service, (value): void =>
+              this._setActionField(config, actionKey, 'service', value),
+            )
+          : html``}
+      </div>
+    `;
+  }
+
+  private _renderSubheading(label: string): TemplateResult {
+    return html`
+      <div class="subheading">${label}</div>
+    `;
+  }
+
+  private _renderTextField(label: string, value: unknown, onInput: (value: string) => void): TemplateResult {
+    return html`
+      <label class="field">
+        <span class="field-label">${label}</span>
+        <input
+          class="field-input"
+          .value=${this._stringValue(value)}
+          @input=${(ev: Event): void => onInput(this._inputValue(ev))}
+        />
+      </label>
+    `;
+  }
+
+  private _renderNumberField(label: string, value: unknown, onInput: (value: string) => void): TemplateResult {
+    return html`
+      <label class="field">
+        <span class="field-label">${label}</span>
+        <input
+          class="field-input"
+          type="number"
+          .value=${this._stringValue(value)}
+          @input=${(ev: Event): void => onInput(this._inputValue(ev))}
+        />
+      </label>
+    `;
+  }
+
+  private _renderCheckbox(label: string, checked: boolean, onChange: (checked: boolean) => void): TemplateResult {
+    return html`
+      <label class="checkbox-card">
+        <input type="checkbox" .checked=${checked} @change=${(ev: Event): void => onChange(this._checkedValue(ev))} />
+        <span>${label}</span>
+      </label>
+    `;
+  }
+
+  private _renderChoiceField(
+    label: string,
+    options: ChoiceOption[],
+    selected: string | undefined,
+    onSelect: (value: string) => void,
+  ): TemplateResult {
+    const selectedValue = selected || '';
+
+    return html`
+      <div class="field">
+        <div class="field-label">${label}</div>
+        <div class="choice-group">
+          ${options.map(
+            option => html`
+              <button
+                class="choice-button ${selectedValue === option.value ? 'selected' : ''}"
+                type="button"
+                @click=${(): void => onSelect(option.value)}
+              >
+                ${option.label}
+              </button>
+            `,
+          )}
+        </div>
+      </div>
     `;
   }
 
@@ -296,1433 +617,552 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     `;
   }
 
-  private _toInputValue(value: unknown): string {
-    return value === undefined || value === null ? '' : String(value);
-  }
-
-  private _renderConfigInput(
-    label: string,
-    configObject: EditorBarConfig | EditorAnimationConfig | EditorPositionsConfig | EditorActionConfig,
-    configAttribute: string,
-    value: unknown,
-    type = 'text',
-    configAdd?: string,
-  ): TemplateResult {
+  private _renderHint(text: string): TemplateResult {
     return html`
-      <div class="editor-field">
-        <label class="select-label">${label}</label>
-        <input
-          class="editor-input"
-          .value=${this._toInputValue(value)}
-          type=${type}
-          .configObject=${configObject}
-          .configAttribute=${configAttribute}
-          .configAdd=${configAdd}
-          @input=${this._valueChanged}
-        />
-      </div>
+      <div class="hint">${text}</div>
     `;
   }
 
-  private _renderSeverityInput(
-    label: string,
-    severityAttribute: keyof EditorSeverityConfig,
-    index: number | null,
-    severityIndex: number,
-    value: unknown,
-    type = 'text',
-  ): TemplateResult {
-    return html`
-      <div class="editor-field">
-        <label class="select-label">${label}</label>
-        <input
-          class="editor-input"
-          .value=${this._toInputValue(value)}
-          type=${type}
-          .severityAttribute=${severityAttribute}
-          .index=${index}
-          .severityIndex=${severityIndex}
-          @input=${this._updateSeverity}
-        />
-      </div>
-    `;
-  }
-
-  private _renderChoiceField(
-    label: string,
-    options: EditorChoiceOption[],
-    value: unknown,
-    configObject: EditorBarConfig | EditorAnimationConfig | EditorPositionsConfig | EditorActionConfig,
-    configAttribute: string,
-    ignoreNull = false,
-    configAdd?: string,
-  ): TemplateResult {
-    return html`
-      <div class="editor-field">
-        <label class="select-label">${label}</label>
-        <div class="choice-group">
-          ${options.map(
-            option => html`
-              <button
-                class="choice-button ${String(value || '') === option.value ? 'selected' : ''}"
-                type="button"
-                .value=${option.value}
-                .configObject=${configObject}
-                .configAttribute=${configAttribute}
-                .configAdd=${configAdd}
-                .ignoreNull=${ignoreNull}
-                @click=${this._valueChanged}
-              >
-                ${option.label}
-              </button>
-            `,
-          )}
-        </div>
-      </div>
-    `;
-  }
-
-  private _renderAddButton(label: string, icon: string, handler, index?: number | null): TemplateResult {
-    return html`
-      <button class="add-button" type="button" @click=${handler} .index=${index}>
-        <ha-icon .icon=${icon}></ha-icon>
-        <span>${label}</span>
-      </button>
-    `;
-  }
-
-  private _renderToggleField(label: string, configObject, configAttribute: string): TemplateResult {
-    const checked = !!configObject[configAttribute];
-    return html`
-      <div class="toggle-card">
-        <ha-formfield .label=${label}>
-          <ha-switch
-            ?checked=${checked}
-            .configAttribute=${configAttribute}
-            .configObject=${configObject}
-            .value=${!checked}
-            @change=${this._valueChanged}
-          ></ha-switch>
-        </ha-formfield>
-      </div>
-    `;
-  }
-
-  private _renderChevron(show: boolean): TemplateResult {
-    return html`
-      <ha-icon class="chevron" .icon=${show ? `mdi:chevron-up` : `mdi:chevron-down`}></ha-icon>
-    `;
-  }
-
-  private _renderFieldAction(actionConfig, config): TemplateResult {
-    const actionValue = config[actionConfig.key] ? config[actionConfig.key].action : '';
-    return html`
-      <div class="field-card action-card">
-        <div class="action-stack">
-          <div class="editor-field">
-            <label class="select-label">${actionConfig.label} Action</label>
-            <div class="choice-group">
-              ${[
-                { label: 'None', value: '' },
-                { label: 'Info', value: 'more-info' },
-                { label: 'Toggle', value: 'toggle' },
-                { label: 'Navigate', value: 'navigate' },
-                { label: 'URL', value: 'url' },
-                { label: 'Service', value: 'call-service' },
-              ].map(
-                option => html`
-                  <button
-                    class="choice-button ${actionValue === option.value ? 'selected' : ''}"
-                    type="button"
-                    .value=${option.value}
-                    .configObject=${config}
-                    .actionKey=${actionConfig.key}
-                    .actionAttribute=${'action'}
-                    @click=${this._updateAction}
-                  >
-                    ${option.label}
-                  </button>
-                `,
-              )}
-            </div>
-          </div>
-          ${config[actionConfig.key]
-            ? html`
-                <ha-icon
-                  class="ha-icon-large clear-icon"
-                  icon="mdi:close"
-                  @click=${this._updateAction}
-                  .value=${''}
-                  .configObject=${config}
-                  .actionKey=${actionConfig.key}
-                  .actionAttribute=${'action'}
-                ></ha-icon>
-              `
-            : html`
-                <span class="action-spacer"></span>
-              `}
-        </div>
-        ${config[actionConfig.key] && config[actionConfig.key].action === 'navigate'
-          ? html`
-              <div class="editor-field">
-                <label class="select-label">${actionConfig.label} Navigation Path</label>
-                <input
-                  class="editor-input"
-                  .value=${this._toInputValue(config[actionConfig.key].navigation_path)}
-                  .configObject=${config}
-                  .actionKey=${actionConfig.key}
-                  .actionAttribute=${'navigation_path'}
-                  @input=${this._updateAction}
-                />
-              </div>
-            `
-          : ''}
-        ${config[actionConfig.key] && config[actionConfig.key].action === 'url'
-          ? html`
-              <div class="editor-field">
-                <label class="select-label">${actionConfig.label} URL</label>
-                <input
-                  class="editor-input"
-                  .value=${this._toInputValue(config[actionConfig.key].url_path)}
-                  .configObject=${config}
-                  .actionKey=${actionConfig.key}
-                  .actionAttribute=${'url_path'}
-                  @input=${this._updateAction}
-                />
-              </div>
-            `
-          : ''}
-        ${config[actionConfig.key] && config[actionConfig.key].action === 'call-service'
-          ? html`
-              <div class="editor-field">
-                <label class="select-label">${actionConfig.label} Service</label>
-                <input
-                  class="editor-input"
-                  .value=${this._toInputValue(config[actionConfig.key].service)}
-                  .configObject=${config}
-                  .actionKey=${actionConfig.key}
-                  .actionAttribute=${'service'}
-                  @input=${this._updateAction}
-                />
-              </div>
-            `
-          : ''}
-      </div>
-    `;
-  }
-
-  private _createActionsElement(index): TemplateResult {
-    let config;
-    let options;
-    if (index === null) {
-      options = this._options.appearance.options.actions;
-      config = this._config;
-    } else {
-      options = this._options.entities.options.entities[index].options.actions;
-      config = this._configArray[index];
-    }
-
-    const actionConfigs = [
-      { key: 'tap_action', label: 'Tap' },
-      { key: 'hold_action', label: 'Hold' },
-      { key: 'double_tap_action', label: 'Double Tap' },
-    ];
-
-    return html`
-      <div class="category">
-        <div
-          class="sub-category"
-          @click=${this._toggleThing}
-          .options=${options}
-          .optionsTarget=${this._options.appearance.options}
-        >
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? html`
-              <div class="value">
-                ${this._renderHelperText('Actions inherit Home Assistant behavior. Leave them empty to keep defaults.')}
-                ${actionConfigs.map(actionConfig => this._renderFieldAction(actionConfig, config))}
-              </div>
-            `
-          : ''}
-      </div>
-    `;
-  }
-
-  private _createEntitiesValues(): TemplateResult[] {
-    if (!this.hass || !this._config) {
-      return [html``];
-    }
-
-    const options = this._options.entities;
-    const entityArray = this._config.entities || this._configArray;
-    const valueElementArray: TemplateResult[] = [];
-    for (const config of this._configArray) {
-      const index = this._configArray.indexOf(config);
-      valueElementArray.push(html`
-        <div class="sub-category entity-row field-card entity-card">
-          <div class="entity-toggle">
-            <div
-              class="entity-meta-toggle"
-              @click=${this._toggleThing}
-              .options=${options.options.entities[index]}
-              .optionsTarget=${options.options.entities}
-              .index=${index}
-            >
-              settings
-            </div>
-            <ha-icon
-              icon="mdi:chevron-${options.options.entities[index].show ? 'up' : 'down'}"
-              @click=${this._toggleThing}
-              class="chevron entity-chevron"
-              .options=${options.options.entities[index]}
-              .optionsTarget=${options.options.entities}
-              .index=${index}
-            ></ha-icon>
-          </div>
-          <div class="value entity-main-field">
-            ${this._renderConfigInput('Entity', this._configArray[index], 'entity', config.entity)}
-            ${this._renderHelperText(this._getEntityHint(config))}
-          </div>
-          <div class="stack-actions icon-group">
-            ${index !== 0
-              ? html`
-                  <ha-icon
-                    class="ha-icon-large"
-                    icon="mdi:arrow-up"
-                    @click=${this._moveEntity}
-                    .configDirection=${'up'}
-                    .configArray=${entityArray}
-                    .arrayAttribute=${'entities'}
-                    .arraySource=${this._config}
-                    .index=${index}
-                  ></ha-icon>
-                `
-              : html`
-                  <ha-icon icon="mdi:arrow-up" class="ha-icon-large muted-icon"></ha-icon>
-                `}
-            ${index !== this._configArray.length - 1
-              ? html`
-                  <ha-icon
-                    class="ha-icon-large"
-                    icon="mdi:arrow-down"
-                    @click=${this._moveEntity}
-                    .configDirection=${'down'}
-                    .configArray=${entityArray}
-                    .arrayAttribute=${'entities'}
-                    .arraySource=${this._config}
-                    .index=${index}
-                  ></ha-icon>
-                `
-              : html`
-                  <ha-icon icon="mdi:arrow-down" class="ha-icon-large muted-icon"></ha-icon>
-                `}
-            <ha-icon
-              class="ha-icon-large"
-              icon="mdi:close"
-              @click=${this._removeEntity}
-              .configAttribute=${'entity'}
-              .configArray=${'entities'}
-              .configIndex=${index}
-            ></ha-icon>
-          </div>
-        </div>
-        ${options.options.entities[index].show
-          ? html`
-              <div class="options nested-options">
-                ${this._createBarElement(index)} ${this._createValueElement(index)}
-                ${this._createPositionsElement(index)} ${this._createSeverityElement(index)}
-                ${this._createAnimationElement(index)} ${this._createActionsElement(index)}
-              </div>
-            `
-          : ''}
-      `);
-    }
-    return valueElementArray;
-  }
-
-  private _createEntitiesElement(): TemplateResult {
-    if (!this.hass || !this._config) {
-      return html``;
-    }
-    const options = this._options.entities;
-
-    return html`
-      <div class="card-config">
-        <div class="option" @click=${this._toggleThing} .options=${options} .optionsTarget=${this._options}>
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? html`
-              <div class="card-background section-scroll">
-                ${this._configArray.length > 0
-                  ? this._createEntitiesValues()
-                  : this._renderEmptyState('No entities yet', 'Add your first entity to start configuring bars.')}
-                <div class="sub-category add-row">
-                  <button
-                    class="add-button"
-                    type="button"
-                    @click=${this._addEntity}
-                    .configArray=${this._configArray}
-                    .configAddValue=${'entity'}
-                    .sourceArray=${this._config.entities}
-                  >
-                    <ha-icon .icon=${'mdi:plus'}></ha-icon>
-                    <span>Add entity</span>
-                  </button>
-                </div>
-              </div>
-            `
-          : ''}
-      </div>
-    `;
-  }
-
-  private _createAppearanceElement(): TemplateResult {
-    if (!this.hass) {
-      return html``;
-    }
-    const options = this._options.appearance;
-    return html`
-      <div class="card-config">
-        <div class="option" @click=${this._toggleThing} .options=${options} .optionsTarget=${this._options}>
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? html`
-              <div class="card-background">
-                ${this._createCardElement()} ${this._createBarElement(null)} ${this._createValueElement(null)}
-                ${this._createPositionsElement(null)} ${this._createSeverityElement(null)}
-                ${this._createAnimationElement(null)} ${this._createActionsElement(null)}
-              </div>
-            `
-          : ''}
-      </div>
-    `;
-  }
-
-  private _createBarElement(index): TemplateResult {
-    let options;
-    let config;
-    if (index !== null) {
-      options = this._options.entities.options.entities[index].options.bar;
-      config = this._configArray[index];
-    } else {
-      options = this._options.appearance.options.bar;
-      config = this._config;
-    }
-    return html`
-      <div class="category" id="bar">
-        <div
-          class="sub-category"
-          @click=${this._toggleThing}
-          .options=${options}
-          .optionsTarget=${this._options.appearance.options}
-        >
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? html`
-              <div class="value">
-                ${this._renderHelperText('Use CSS values like 40px, 100%, or theme colors to fine-tune the bar.')}
-                ${this._renderChoiceField(
-                  'Direction',
-                  [{ label: 'Right', value: 'right' }, { label: 'Up', value: 'up' }],
-                  config.direction || 'right',
-                  config,
-                  'direction',
-                  true,
-                )}
-                ${index !== null ? this._renderConfigInput('Name', config, 'name', config.name) : ''}
-                ${this._renderConfigInput('Icon', config, 'icon', config.icon)}
-                ${this._renderConfigInput('Height', config, 'height', config.height)}
-                ${this._renderConfigInput('Width', config, 'width', config.width)}
-                ${this._renderConfigInput('Color', config, 'color', config.color)}
-              </div>
-            `
-          : ''}
-      </div>
-    `;
-  }
-
-  private _createAnimationElement(index): TemplateResult {
-    let options;
-    let config;
-    if (index !== null) {
-      options = this._options.entities.options.entities[index].options.animation;
-      config = this._configArray[index];
-    } else {
-      options = this._options.appearance.options.animation;
-      config = this._config;
-    }
-    config.animation = { ...config.animation };
-    return html`
-      <div class="category" id="bar">
-        <div
-          class="sub-category"
-          @click=${this._toggleThing}
-          .options=${options}
-          .optionsTarget=${this._options.appearance.options}
-        >
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? config.animation
-            ? html`
-                <div class="value">
-                  ${this._renderHelperText('Animation can be turned on globally or per entity. Speed is in seconds.')}
-                  ${this._renderChoiceField(
-                    'State',
-                    [{ label: 'On', value: 'on' }, { label: 'Off', value: 'off' }],
-                    config.animation.state || 'off',
-                    config.animation,
-                    'state',
-                    true,
-                  )}
-                  ${this._renderConfigInput('Speed', config.animation, 'speed', config.animation.speed)}
-                </div>
-              `
-            : html`
-                <div class="value">
-                  ${this._renderHelperText('Set a state to create the animation block, then fine-tune the speed.')}
-                  ${this._renderChoiceField(
-                    'State',
-                    [{ label: 'On', value: 'on' }, { label: 'Off', value: 'off' }],
-                    '',
-                    config,
-                    'state',
-                    true,
-                    'animation',
-                  )}
-                  ${this._renderConfigInput('Speed', config, 'speed', '', 'text', 'animation')}
-                </div>
-              `
-          : ''}
-      </div>
-    `;
-  }
-
-  private _createSeverityElement(index): TemplateResult {
-    let options;
-    let config;
-    if (index !== null) {
-      options = this._options.entities.options.entities[index].options.severity;
-      config = this._configArray[index];
-    } else {
-      options = this._options.appearance.options.severity;
-      config = this._config;
-    }
-    const arrayLength = config.severity ? config.severity.length : 0;
-    return html`
-      <div class="category" id="bar">
-        <div
-          class="sub-category"
-          @click=${this._toggleThing}
-          .options=${options}
-          .optionsTarget=${this._options.appearance.options}
-        >
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? html`
-              <div class="card-background section-scroll severity-scroll">
-                ${arrayLength > 0
-                  ? html`
-                      ${this._createSeverityValues(index)}
-                    `
-                  : this._renderEmptyState(
-                      'No severity rules',
-                      'Add ranges to map values to colors, icons, or hide rules.',
-                    )}
-                <div class="sub-category add-row">
-                  ${this._renderAddButton('Add severity rule', 'mdi:plus', this._addSeverity, index)}
-                </div>
-              </div>
-            `
-          : ''}
-      </div>
-    `;
-  }
-
-  private _createSeverityValues(index): TemplateResult[] {
-    let config;
-    if (index === null) {
-      config = this._config;
-    } else {
-      config = this._configArray[index];
-    }
-    const severityValuesArray: TemplateResult[] = [];
-    for (const severity of config.severity) {
-      const severityIndex = config.severity.indexOf(severity);
-      severityValuesArray.push(html`
-        <div class="sub-category severity-row field-card">
-          <div class="value severity-fields">
-            <div class="inline-fields">
-              ${this._renderSeverityInput('From', 'from', index, severityIndex, severity.from, 'number')}
-              ${this._renderSeverityInput('To', 'to', index, severityIndex, severity.to, 'number')}
-            </div>
-            <div class="inline-fields">
-              ${this._renderSeverityInput('Color', 'color', index, severityIndex, severity.color)}
-              ${this._renderSeverityInput('Icon', 'icon', index, severityIndex, severity.icon)}
-            </div>
-            <div class="toggle-card compact-toggle">
-              <ha-formfield label="Hide">
-                <ha-switch
-                  ?checked=${!!severity.hide}
-                  .severityAttribute=${'hide'}
-                  .index=${index}
-                  .severityIndex=${severityIndex}
-                  .value=${!severity.hide}
-                  @change=${this._updateSeverity}
-                ></ha-switch>
-              </ha-formfield>
-            </div>
-          </div>
-          <div class="stack-actions icon-group">
-            ${severityIndex !== 0
-              ? html`
-                  <ha-icon
-                    class="ha-icon-large"
-                    icon="mdi:arrow-up"
-                    @click=${this._moveSeverity}
-                    .configDirection=${'up'}
-                    .index=${index}
-                    .severityIndex=${severityIndex}
-                  ></ha-icon>
-                `
-              : html`
-                  <ha-icon icon="mdi:arrow-up" class="ha-icon-large muted-icon"></ha-icon>
-                `}
-            ${severityIndex !== config.severity.length - 1
-              ? html`
-                  <ha-icon
-                    class="ha-icon-large"
-                    icon="mdi:arrow-down"
-                    @click=${this._moveSeverity}
-                    .configDirection=${'down'}
-                    .index=${index}
-                    .severityIndex=${severityIndex}
-                  ></ha-icon>
-                `
-              : html`
-                  <ha-icon icon="mdi:arrow-down" class="ha-icon-large muted-icon"></ha-icon>
-                `}
-            <ha-icon
-              class="ha-icon-large"
-              icon="mdi:close"
-              @click=${this._removeSeverity}
-              .index=${index}
-              .severityIndex=${severityIndex}
-            ></ha-icon>
-          </div>
-        </div>
-      `);
-    }
-    return severityValuesArray;
-  }
-
-  private _createCardElement(): TemplateResult {
-    if (!this.hass) {
-      return html``;
-    }
-    const config = this._config;
-    const options = this._options.appearance.options.card;
-    return html`
-      <div class="category" id="card">
-        <div
-          class="sub-category"
-          @click=${this._toggleThing}
-          .options=${options}
-          .optionsTarget=${this._options.appearance.options}
-        >
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? html`
-              <div class="value-container">
-                ${this._renderHelperText(
-                  'Card-level settings apply to the whole stack and work best when shared across entities.',
-                )}
-                ${this._renderConfigInput('Header Title', config, 'title', config.title)}
-                ${this._renderConfigInput('Columns', config, 'columns', config.columns, 'number')}
-                ${this._renderChoiceField(
-                  'Stack',
-                  [{ label: 'None', value: '' }, { label: 'Horizontal', value: 'horizontal' }],
-                  config.stack,
-                  config,
-                  'stack',
-                )}
-                <div class="toggle-grid">
-                  ${this._renderToggleField('Entity Row', config, 'entity_row')}
-                  ${this._renderToggleField('Entity Config', config, 'entity_config')}
-                </div>
-              </div>
-            `
-          : ''}
-      </div>
-    `;
-  }
-
-  private _createPositionsValues(index): TemplateResult[] {
-    const defaultPositions = {
-      icon: 'outside',
-      indicator: 'outside',
-      name: 'inside',
-      minmax: 'off',
-      value: 'inside',
+  private _toggleSection(key: SectionKey): void {
+    this._sections = {
+      ...this._sections,
+      [key]: !this._sections[key],
     };
-    let config;
-    if (index === null) {
-      config = this._config;
-    } else {
-      config = this._configArray[index];
-    }
-    config.positions = { ...config.positions };
-    const positionElementsArray: TemplateResult[] = [];
-    const objectKeys = Object.keys(defaultPositions);
-    for (const position of objectKeys) {
-      if (config.positions[position]) {
-        positionElementsArray.push(html`
-          <div class="value field-card compact-field-card">
-            ${this._renderChoiceField(
-              position,
-              [
-                { label: 'Inside', value: 'inside' },
-                { label: 'Outside', value: 'outside' },
-                { label: 'Off', value: 'off' },
-              ],
-              config.positions[position],
-              config.positions,
-              position,
-              true,
-            )}
-            <ha-icon
-              class="ha-icon-large"
-              icon="mdi:close"
-              @click=${this._valueChanged}
-              .value=${''}
-              .configAttribute=${position}
-              .configObject=${config.positions}
-            ></ha-icon>
-          </div>
-        `);
-      } else {
-        positionElementsArray.push(html`
-          <div class="value field-card compact-field-card">
-            ${this._renderChoiceField(
-              position,
-              [
-                { label: 'Default', value: '' },
-                { label: 'Inside', value: 'inside' },
-                { label: 'Outside', value: 'outside' },
-                { label: 'Off', value: 'off' },
-              ],
-              '',
-              config.positions,
-              position,
-            )}
-          </div>
-        `);
-      }
-    }
-    return positionElementsArray;
   }
 
-  private _createPositionsElement(index): TemplateResult {
-    if (!this.hass) {
-      return html``;
-    }
-
-    let options;
-    if (index === null) {
-      options = this._options.appearance.options.positions;
-    } else {
-      options = this._options.entities.options.entities[index].options.positions;
-    }
-    return html`
-      <div class="category">
-        <div
-          class="sub-category"
-          @click=${this._toggleThing}
-          .options=${options}
-          .optionsTarget=${this._options.appearance.options}
-        >
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? html`
-              <div class="positions-grid">${this._createPositionsValues(index)}</div>
-              ${this._renderHelperText(
-                'For advanced combinations, YAML still supports values beyond these quick presets.',
-              )}
-            `
-          : ``}
-      </div>
-    `;
+  private _toggleEntity(index: number): void {
+    this._entityOpen = this._entityOpen.map((open, itemIndex) => (itemIndex === index ? !open : open));
   }
 
-  private _createValueElement(index): TemplateResult {
-    if (!this.hass) {
-      return html``;
+  private _addEntity = (): void => {
+    this._configArray = [...this._configArray, { entity: '' }];
+    this._entityOpen = [...this._entityOpen, true];
+    this._syncAndEmit();
+  };
+
+  private _moveEntity(index: number, direction: -1 | 1): void {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= this._configArray.length) {
+      return;
     }
 
-    let options;
-    let config;
+    this._configArray = arrayMove(this._configArray, index, newIndex) as EditorBarConfig[];
+    this._entityOpen = arrayMove(this._entityOpen, index, newIndex) as boolean[];
+    this._syncAndEmit();
+  }
+
+  private _removeEntity(index: number): void {
+    this._configArray = this._configArray.filter((_, itemIndex) => itemIndex !== index);
+    this._entityOpen = this._entityOpen.filter((_, itemIndex) => itemIndex !== index);
+
+    if (this._configArray.length === 0) {
+      this._configArray = [{ entity: '' }];
+      this._entityOpen = [true];
+    }
+
+    this._syncAndEmit();
+  }
+
+  private _addSeverity(config: EditorBarConfig, index: number | null): void {
+    const nextRule: EditorSeverityConfig = { from: '', to: '', color: '', icon: '', hide: false };
+    config.severity = [...(config.severity || []), nextRule];
+
     if (index !== null) {
-      options = this._options.entities.options.entities[index].options.value;
-      config = this._configArray[index];
-    } else {
-      options = this._options.appearance.options.value;
-      config = this._config;
+      this._entityOpen[index] = true;
     }
 
-    return html`
-      <div class="category" id="value">
-        <div
-          class="sub-category"
-          @click=${this._toggleThing}
-          .options=${options}
-          .optionsTarget=${this._options.appearance.options}
-        >
-          <div class="row">
-            <ha-icon .icon=${`mdi:${options.icon}`}></ha-icon>
-            <div class="title">${options.name}</div>
-            ${this._renderChevron(options.show)}
-          </div>
-          <div class="secondary">${options.secondary}</div>
-        </div>
-        ${options.show
-          ? html`
-              <div class="value">
-                ${this._renderHelperText(
-                  'Min, max, and target support simple numbers here. Use YAML for entity-driven objects.',
-                )}
-                <div class="toggle-grid">
-                  ${this._renderToggleField('Limit Value', config, 'limit_value')}
-                  ${this._renderToggleField('Complementary', config, 'complementary')}
-                </div>
-                ${this._renderConfigInput('Decimal', config, 'decimal', config.decimal, 'number')}
-                ${this._renderConfigInput('Min', config, 'min', config.min, 'number')}
-                ${this._renderConfigInput('Max', config, 'max', config.max, 'number')}
-                ${this._renderConfigInput('Target', config, 'target', config.target, 'number')}
-                ${this._renderConfigInput(
-                  'Unit of Measurement',
-                  config,
-                  'unit_of_measurement',
-                  config.unit_of_measurement,
-                )}
-                ${this._renderConfigInput('Attribute', config, 'attribute', config.attribute)}
-              </div>
-            `
-          : ''}
-      </div>
-    `;
+    this._syncAndEmit();
   }
 
-  private _updateAction(ev): void {
-    if (!this._config || !this.hass) {
-      return;
-    }
-    const target = ev.currentTarget || ev.target;
-    const configObject = target.configObject;
-    const actionKey = target.actionKey;
-    const actionAttribute = target.actionAttribute;
-
-    if (!configObject || !actionKey || !actionAttribute) {
+  private _moveSeverity(config: EditorBarConfig, index: number, direction: -1 | 1): void {
+    if (!config.severity) {
       return;
     }
 
-    if (!configObject[actionKey]) {
-      configObject[actionKey] = {};
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= config.severity.length) {
+      return;
     }
 
-    if (target.value === '') {
-      delete configObject[actionKey][actionAttribute];
+    config.severity = arrayMove(config.severity, index, newIndex) as EditorSeverityConfig[];
+    this._syncAndEmit();
+  }
+
+  private _removeSeverity(config: EditorBarConfig, index: number): void {
+    if (!config.severity) {
+      return;
+    }
+
+    config.severity = config.severity.filter((_, severityIndex) => severityIndex !== index);
+    this._syncAndEmit();
+  }
+
+  private _setField(config: EditorConfigTarget, key: string, value: string): void {
+    if (value === '') {
+      delete config[key];
     } else {
-      configObject[actionKey][actionAttribute] = target.value;
+      config[key] = value;
+    }
+    this._syncAndEmit();
+  }
+
+  private _setBoolean(config: EditorBarConfig, key: keyof EditorBarConfig, checked: boolean): void {
+    if (checked) {
+      config[key] = checked;
+    } else {
+      delete config[key];
+    }
+    this._syncAndEmit();
+  }
+
+  private _setPosition(config: EditorBarConfig, key: string, value: string): void {
+    const positions = this._ensurePositions(config);
+    if (value === '') {
+      delete positions[key];
+    } else {
+      positions[key] = value;
+    }
+    this._syncAndEmit();
+  }
+
+  private _setAnimationField(config: EditorBarConfig, key: keyof EditorAnimationConfig, value: string): void {
+    const animation = this._ensureAnimation(config);
+    if (value === '') {
+      delete animation[key];
+    } else {
+      animation[key] = value;
+    }
+    this._syncAndEmit();
+  }
+
+  private _setActionField(
+    config: EditorBarConfig,
+    actionKey: ActionKey,
+    key: keyof EditorActionConfig,
+    value: string,
+  ): void {
+    const actionConfig = this._getAction(config, actionKey);
+
+    if (key === 'action' && value === '') {
+      delete config[actionKey];
+      this._syncAndEmit();
+      return;
     }
 
-    if (Object.keys(configObject[actionKey]).length === 0) {
-      delete configObject[actionKey];
+    if (value === '') {
+      delete actionConfig[key];
+    } else {
+      actionConfig[key] = value;
     }
 
-    this._config.entities = this._configArray;
+    if (!actionConfig.action) {
+      delete config[actionKey];
+    }
+
+    this._syncAndEmit();
+  }
+
+  private _setSeverityField(
+    config: EditorBarConfig,
+    severityIndex: number,
+    key: 'from' | 'to' | 'color' | 'icon',
+    value: string,
+  ): void {
+    if (!config.severity) {
+      return;
+    }
+
+    if (value === '') {
+      delete config.severity[severityIndex][key];
+    } else {
+      config.severity[severityIndex][key] = value;
+    }
+
+    this._syncAndEmit();
+  }
+
+  private _setSeverityBoolean(config: EditorBarConfig, severityIndex: number, key: 'hide', checked: boolean): void {
+    if (!config.severity) {
+      return;
+    }
+
+    if (checked) {
+      config.severity[severityIndex][key] = checked;
+    } else {
+      delete config.severity[severityIndex][key];
+    }
+
+    this._syncAndEmit();
+  }
+
+  private _ensurePositions(config: EditorBarConfig): EditorPositionsConfig {
+    if (!config.positions) {
+      config.positions = {};
+    }
+    return config.positions;
+  }
+
+  private _ensureAnimation(config: EditorBarConfig): EditorAnimationConfig {
+    if (!config.animation) {
+      config.animation = {};
+    }
+    return config.animation;
+  }
+
+  private _getAction(config: EditorBarConfig, actionKey: ActionKey): EditorActionConfig {
+    if (!config[actionKey]) {
+      config[actionKey] = {};
+    }
+    return config[actionKey] as EditorActionConfig;
+  }
+
+  private _syncAndEmit(): void {
+    this._config = {
+      ...this._config,
+      entities: this._configArray.map(entityConfig => this._cleanConfig(entityConfig)),
+    };
+
     this._emitConfigChanged();
+    this.requestUpdate();
   }
 
-  private _toggleThing(ev): void {
-    const target = ev.currentTarget || ev.target;
-    const options = target.options;
-    const show = !options.show;
-    if (target.optionsTarget) {
-      if (Array.isArray(target.optionsTarget)) {
-        for (const options of target.optionsTarget) {
-          options.show = false;
+  private _emitConfigChanged(): void {
+    fireEvent(this, 'config-changed', { config: this._cleanConfig(this._config) as BarCardConfig });
+  }
+
+  private _cleanConfig(config: EditorBarConfig): EditorBarConfig {
+    const cleaned: EditorBarConfig = { ...config };
+
+    delete cleaned.entity;
+    if (config.entity !== undefined) {
+      cleaned.entity = config.entity;
+    }
+
+    if (cleaned.positions) {
+      const positions = { ...cleaned.positions };
+      Object.keys(positions).forEach(key => {
+        if (positions[key] === '' || positions[key] === undefined) {
+          delete positions[key];
         }
-      } else {
-        for (const [key] of Object.entries(target.optionsTarget)) {
-          target.optionsTarget[key].show = false;
-        }
-      }
-    }
-    options.show = show;
-    this._toggle = !this._toggle;
-  }
-
-  private _addEntity(ev): void {
-    if (!this._config || !this.hass) {
-      return;
-    }
-    const target = ev.currentTarget || ev.target;
-    let newObject;
-    if (target.configAddObject) {
-      newObject = target.configAddObject;
-    } else {
-      newObject = { [target.configAddValue]: '' };
-    }
-    const newArray = target.configArray.slice();
-    newArray.push(newObject);
-    this._config.entities = newArray;
-    this._emitConfigChanged();
-  }
-
-  private _moveEntity(ev): void {
-    if (!this._config || !this.hass) {
-      return;
-    }
-    const target = ev.currentTarget || ev.target;
-    let newArray = target.configArray.slice();
-    if (target.configDirection == 'up') newArray = arrayMove(newArray, target.index, target.index - 1);
-    else if (target.configDirection == 'down') newArray = arrayMove(newArray, target.index, target.index + 1);
-    this._config.entities = newArray;
-    this._emitConfigChanged();
-  }
-
-  private _removeEntity(ev): void {
-    if (!this._config || !this.hass) {
-      return;
-    }
-    const target = ev.currentTarget || ev.target;
-    const entitiesArray: EditorBarConfig[] = [];
-    let index = 0;
-    for (const config of this._configArray) {
-      if (target.configIndex !== index) {
-        entitiesArray.push(config);
-      }
-      index++;
-    }
-    const newConfig = { [target.configArray]: entitiesArray };
-    this._config = Object.assign(this._config, newConfig);
-    this._emitConfigChanged();
-  }
-
-  private _addSeverity(ev): void {
-    if (!this._config || !this.hass) {
-      return;
-    }
-    const target = ev.currentTarget || ev.target;
-
-    let severityArray;
-    if (target.index === null) {
-      severityArray = this._config.severity;
-    } else {
-      severityArray = this._config.entities ? this._config.entities[target.index].severity : undefined;
-    }
-
-    if (!severityArray) {
-      severityArray = [];
-    }
-
-    const newObject = { from: '', to: '', color: '' };
-    const newArray = severityArray.slice();
-    newArray.push(newObject);
-
-    if (target.index === null) {
-      this._config.severity = newArray;
-    } else {
-      this._configArray[target.index].severity = newArray;
-    }
-    this._config.entities = this._configArray;
-    this._emitConfigChanged();
-  }
-
-  private _moveSeverity(ev): void {
-    if (!this._config || !this.hass) {
-      return;
-    }
-    const target = ev.currentTarget || ev.target;
-
-    let severityArray;
-    if (target.index === null) {
-      severityArray = this._config.severity;
-    } else {
-      severityArray = this._config.entities ? this._config.entities[target.index].severity : undefined;
-    }
-
-    if (!severityArray) {
-      return;
-    }
-
-    let newArray = severityArray.slice();
-    if (target.configDirection == 'up') {
-      newArray = arrayMove(newArray, target.severityIndex, target.severityIndex - 1);
-    } else if (target.configDirection == 'down') {
-      newArray = arrayMove(newArray, target.severityIndex, target.severityIndex + 1);
-    }
-
-    if (target.index === null) {
-      this._config.severity = newArray;
-    } else {
-      this._configArray[target.index].severity = newArray;
-    }
-    this._config.entities = this._configArray;
-    this._emitConfigChanged();
-  }
-
-  private _removeSeverity(ev): void {
-    if (!this._config || !this.hass) {
-      return;
-    }
-    const target = ev.currentTarget || ev.target;
-
-    let severityArray;
-    if (target.index === null) {
-      severityArray = this._config.severity;
-    } else {
-      severityArray = this._configArray[target.index].severity;
-    }
-
-    const clonedArray = severityArray.slice();
-    const newArray: EditorSeverityConfig[] = [];
-    let arrayIndex = 0;
-    for (const severity of clonedArray) {
-      if (target.severityIndex !== arrayIndex) {
-        newArray.push(severity);
-      }
-      arrayIndex++;
-    }
-    if (target.index === null) {
-      if (newArray.length === 0) {
-        delete this._config.severity;
-      } else {
-        this._config.severity = newArray;
-      }
-    } else {
-      if (newArray.length === 0) {
-        delete this._configArray[target.index].severity;
-      } else {
-        this._configArray[target.index].severity = newArray;
-      }
-    }
-    this._config.entities = this._configArray;
-    this._emitConfigChanged();
-  }
-
-  private _updateSeverity(ev): void {
-    const target = ev.currentTarget || ev.target;
-
-    let severityArray;
-    if (target.index === null) {
-      severityArray = this._config.severity;
-    } else {
-      severityArray = this._configArray[target.index].severity;
-    }
-    const newSeverityArray: EditorSeverityConfig[] = [];
-    for (const index in severityArray) {
-      if (target.severityIndex == index) {
-        const clonedObject = { ...severityArray[index] };
-        const newObject = { [target.severityAttribute]: target.value };
-        const mergedObject = Object.assign(clonedObject, newObject);
-        if (target.value == '') {
-          delete mergedObject[target.severityAttribute];
-        }
-        newSeverityArray.push(mergedObject);
-      } else {
-        newSeverityArray.push(severityArray[index]);
-      }
-    }
-
-    if (target.index === null) {
-      this._config.severity = newSeverityArray;
-    } else {
-      this._configArray[target.index].severity = newSeverityArray;
-    }
-    this._config.entities = this._configArray;
-    this._emitConfigChanged();
-  }
-
-  private _valueChanged(ev): void {
-    if (!this._config || !this.hass) {
-      return;
-    }
-    const target = ev.currentTarget || ev.target;
-    if (target.configObject[target.configAttribute] == target.value) {
-      return;
-    }
-
-    if (target.configAdd && target.value !== '') {
-      target.configObject = Object.assign(target.configObject, {
-        [target.configAdd]: { [target.configAttribute]: target.value },
       });
+      cleaned.positions = Object.keys(positions).length > 0 ? positions : undefined;
     }
-    if (target.configAttribute && target.configObject && !target.configAdd) {
-      if (target.value == '' || target.value === false) {
-        if (target.ignoreNull == true) return;
-        delete target.configObject[target.configAttribute];
-      } else {
-        target.configObject[target.configAttribute] = target.value;
+
+    if (cleaned.animation) {
+      const animation = { ...cleaned.animation };
+      if (!animation.state) {
+        delete animation.state;
       }
+      if (!animation.speed) {
+        delete animation.speed;
+      }
+      cleaned.animation = Object.keys(animation).length > 0 ? animation : undefined;
     }
-    this._config.entities = this._configArray;
-    this._emitConfigChanged();
+
+    if (cleaned.severity) {
+      const severity = cleaned.severity
+        .map(rule => {
+          const nextRule = { ...rule };
+          if (!nextRule.from && nextRule.from !== 0) {
+            delete nextRule.from;
+          }
+          if (!nextRule.to && nextRule.to !== 0) {
+            delete nextRule.to;
+          }
+          if (!nextRule.color) {
+            delete nextRule.color;
+          }
+          if (!nextRule.icon) {
+            delete nextRule.icon;
+          }
+          if (!nextRule.hide) {
+            delete nextRule.hide;
+          }
+          return nextRule;
+        })
+        .filter(rule => Object.keys(rule).length > 0);
+      cleaned.severity = severity.length > 0 ? severity : undefined;
+    }
+
+    (['tap_action', 'hold_action', 'double_tap_action'] as ActionKey[]).forEach(actionKey => {
+      const actionConfig = cleaned[actionKey] as EditorActionConfig | undefined;
+      if (!actionConfig) {
+        return;
+      }
+
+      const nextAction = { ...actionConfig };
+      if (!nextAction.action) {
+        delete cleaned[actionKey];
+        return;
+      }
+      if (!nextAction.navigation_path) {
+        delete nextAction.navigation_path;
+      }
+      if (!nextAction.url_path) {
+        delete nextAction.url_path;
+      }
+      if (!nextAction.service) {
+        delete nextAction.service;
+      }
+      cleaned[actionKey] = nextAction;
+    });
+
+    if (cleaned.entities) {
+      cleaned.entities = cleaned.entities.map(entity => this._cleanConfig(entity));
+    }
+
+    Object.keys(cleaned).forEach(key => {
+      const value = cleaned[key];
+      if (value === '' || value === undefined) {
+        delete cleaned[key];
+      }
+    });
+
+    return cleaned;
+  }
+
+  private _getEntityHint(config: EditorBarConfig): string {
+    if (!this.hass || !config.entity) {
+      return 'Enter an entity id, then tune only the overrides you need.';
+    }
+
+    const stateObj = this.hass.states[config.entity];
+    if (!stateObj) {
+      return 'Entity not found yet in Home Assistant. Double-check the entity id.';
+    }
+
+    const friendlyName = stateObj.attributes.friendly_name || config.entity;
+    return `${friendlyName}: ${stateObj.state}`;
+  }
+
+  private _inputValue(ev: Event): string {
+    return (ev.currentTarget as HTMLInputElement).value;
+  }
+
+  private _checkedValue(ev: Event): boolean {
+    return (ev.currentTarget as HTMLInputElement).checked;
+  }
+
+  private _stringValue(value: unknown): string {
+    return value === undefined || value === null ? '' : String(value);
   }
 
   static get styles(): CSSResult {
     return css`
+      :host {
+        display: block;
+      }
       .editor-shell {
         display: grid;
         gap: 16px;
       }
-      .option {
-        padding: 14px 16px;
-        cursor: pointer;
-        border-radius: 14px;
-        background: var(--ha-card-background, var(--paper-card-background-color));
+      .editor-note,
+      .panel,
+      .entity-card,
+      .rule-card {
+        background: var(--ha-card-background, var(--card-background-color));
         border: 1px solid var(--divider-color);
-        box-shadow: var(--ha-card-box-shadow, none);
-      }
-      .options {
-        background: var(--primary-background-color);
-        border-radius: 14px;
-        padding: 12px;
-        margin-top: 10px;
-      }
-      .sub-category {
-        cursor: pointer;
-        border-radius: 12px;
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        pointer-events: none;
-      }
-      .chevron {
-        margin-left: auto;
-      }
-      .title {
-        font-weight: 600;
-        pointer-events: none;
-      }
-      .secondary {
-        padding-left: 36px;
-        color: var(--secondary-text-color);
-        margin-top: 4px;
-        pointer-events: none;
-      }
-      .value {
-        padding: 10px 8px 2px;
-        display: grid;
-        gap: 10px;
-      }
-      .value-container {
-        padding: 10px 8px 2px;
-        display: grid;
-        gap: 10px;
-      }
-      .value-number {
-        max-width: 160px;
-      }
-      ha-fab {
-        margin: 8px;
-      }
-      ha-switch {
-        padding: 6px 0;
-      }
-      .card-background {
-        background: var(--ha-card-background, var(--paper-card-background-color));
         border-radius: 16px;
-        padding: 12px;
-        border: 1px solid var(--divider-color);
-        margin-top: 10px;
       }
-      .category {
-        background: #0000;
-        margin-top: 8px;
+      .editor-note {
+        padding: 14px 16px;
       }
-      .ha-icon-large {
-        cursor: pointer;
-        margin: 0px 4px;
-      }
-      .editor-select {
-        width: 100%;
-        box-sizing: border-box;
-        background: var(--card-background-color);
-        border: 1px solid var(--divider-color);
-        border-radius: 6px;
+      .note-title,
+      .panel-title,
+      .entity-title,
+      .rule-title,
+      .subheading {
+        font-weight: 600;
         color: var(--primary-text-color);
-        padding: 8px;
-        margin: 6px 0 0;
       }
-      .editor-input {
-        width: 100%;
-        box-sizing: border-box;
-        background: var(--card-background-color);
-        border: 1px solid var(--divider-color);
-        border-radius: 10px;
-        color: var(--primary-text-color);
-        padding: 10px 12px;
+      .note-body,
+      .panel-description,
+      .entity-subtitle,
+      .hint,
+      .empty-description {
+        color: var(--secondary-text-color);
+        line-height: 1.45;
+      }
+      .panel-header,
+      .entity-summary,
+      .icon-button,
+      .choice-button,
+      .add-button {
         font: inherit;
       }
-      .editor-field {
+      .panel-header,
+      .entity-summary {
+        width: 100%;
+        background: transparent;
+        border: 0;
+        color: inherit;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        text-align: left;
+        cursor: pointer;
+      }
+      .panel-body,
+      .entity-body {
+        padding: 0 16px 16px;
+        display: grid;
+        gap: 14px;
+      }
+      .entity-header,
+      .rule-header,
+      .toolbar,
+      .entity-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .entity-header {
+        padding-right: 12px;
+      }
+      .icon-actions {
+        display: flex;
+        gap: 6px;
+      }
+      .icon-button {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        border: 1px solid var(--divider-color);
+        background: transparent;
+        color: var(--primary-text-color);
+        cursor: pointer;
+      }
+      .icon-button[disabled] {
+        opacity: 0.35;
+        cursor: default;
+      }
+      .icon-button.danger {
+        color: var(--error-color);
+      }
+      .subheading {
+        padding-top: 4px;
+        border-top: 1px solid var(--divider-color);
+      }
+      .field {
         display: grid;
         gap: 6px;
         min-width: 0;
+      }
+      .field-label {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .field-input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--divider-color);
+        border-radius: 12px;
+        background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+        color: var(--primary-text-color);
+        padding: 12px;
+        font: inherit;
+      }
+      .group-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .group-grid.two-col {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .group-grid.three-col {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .toggle-grid,
+      .positions-grid,
+      .entity-list,
+      .severity-list,
+      .actions-list {
+        display: grid;
+        gap: 12px;
+      }
+      .toggle-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .positions-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .checkbox-card {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        border: 1px solid var(--divider-color);
+        border-radius: 12px;
+        padding: 12px;
+        background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
       }
       .choice-group {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
       }
-      .choice-button {
+      .choice-button,
+      .add-button {
         border: 1px solid var(--divider-color);
-        background: var(--card-background-color);
-        color: var(--primary-text-color);
         border-radius: 999px;
+        background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+        color: var(--primary-text-color);
         padding: 8px 12px;
-        font: inherit;
         cursor: pointer;
       }
-      .choice-button.selected {
-        background: var(--primary-color);
+      .choice-button.selected,
+      .add-button {
         border-color: var(--primary-color);
-        color: var(--text-primary-color, #fff);
-      }
-      .select-label {
-        display: block;
-        color: var(--secondary-text-color);
-        font-size: 12px;
-        margin-bottom: 4px;
-      }
-      .helper-text {
-        color: var(--secondary-text-color);
-        font-size: 12px;
-        line-height: 1.45;
-      }
-      .empty-state {
-        padding: 18px 16px;
-        border: 1px dashed var(--divider-color);
-        border-radius: 12px;
-        text-align: center;
-        color: var(--secondary-text-color);
-      }
-      .empty-title {
-        color: var(--primary-text-color);
-        font-weight: 600;
-        margin-bottom: 4px;
-      }
-      .empty-description {
-        font-size: 13px;
-        line-height: 1.45;
-      }
-      .card-config {
-        display: block;
-      }
-      .nested-options {
-        margin: 10px 0 0 12px;
-      }
-      .field-card {
-        background: color-mix(
-          in srgb,
-          var(--secondary-background-color, var(--primary-background-color)) 78%,
-          transparent
-        );
-        border: 1px solid var(--divider-color);
-        border-radius: 12px;
-        padding: 12px;
-      }
-      .entity-card,
-      .severity-row,
-      .action-card {
-        margin-bottom: 10px;
-      }
-      .entity-row,
-      .severity-row {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 10px;
-        padding: 8px 0;
-      }
-      .entity-toggle {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        min-width: 32px;
-      }
-      .entity-meta-toggle {
-        font-size: 10px;
-        line-height: 1;
-        opacity: 0.6;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        margin-bottom: 4px;
-      }
-      .entity-main-field {
-        min-width: 0;
-      }
-      .action-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
-        align-items: end;
-        gap: 8px;
-      }
-      .action-spacer {
-        width: 24px;
-        height: 24px;
-      }
-      .action-stack {
-        display: grid;
-        gap: 10px;
-      }
-      .clear-icon {
-        align-self: end;
-      }
-      .positions-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 8px 12px;
-      }
-      .inline-fields {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-      }
-      .stack-actions {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-      }
-      .icon-group {
-        gap: 4px;
-        padding-left: 8px;
-        border-left: 1px solid var(--divider-color);
-      }
-      .toggle-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 10px;
-      }
-      .toggle-card {
-        padding: 10px 12px;
-        border-radius: 12px;
-        background: color-mix(in srgb, var(--primary-background-color) 70%, transparent);
-        border: 1px solid var(--divider-color);
-      }
-      .compact-toggle {
-        max-width: 140px;
-      }
-      .severity-fields {
-        padding: 0;
-      }
-      .compact-field-card {
-        padding: 10px;
-      }
-      .muted-icon {
-        opacity: 0.25;
-      }
-      .add-row {
-        display: flex;
-        justify-content: flex-end;
-      }
-      .section-scroll {
-        max-height: 420px;
-        overflow: auto;
-      }
-      .severity-scroll {
-        max-height: 460px;
+        background: color-mix(in srgb, var(--primary-color) 15%, transparent);
       }
       .add-button {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        border: 1px solid var(--primary-color);
-        background: color-mix(in srgb, var(--primary-color) 16%, transparent);
-        color: var(--primary-text-color);
-        border-radius: 999px;
-        padding: 10px 14px;
-        font: inherit;
-        cursor: pointer;
       }
-      @media (max-width: 600px) {
-        .entity-row,
-        .severity-row,
-        .action-row {
+      .toolbar.end {
+        justify-content: flex-end;
+      }
+      .hint {
+        font-size: 12px;
+      }
+      .empty-state {
+        padding: 16px;
+        border: 1px dashed var(--divider-color);
+        border-radius: 12px;
+        text-align: center;
+      }
+      .empty-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      @media (max-width: 700px) {
+        .group-grid.two-col,
+        .group-grid.three-col {
           grid-template-columns: 1fr;
         }
-        .entity-toggle,
-        .stack-actions {
-          justify-self: start;
+        .entity-header,
+        .rule-header {
           align-items: flex-start;
+          flex-direction: column;
         }
-        .inline-fields {
-          grid-template-columns: 1fr;
-        }
-        .icon-group {
-          border-left: 0;
-          padding-left: 0;
+        .icon-actions {
+          align-self: flex-end;
         }
       }
     `;
   }
 }
+
 // @ts-expect-error
 window.customCards = window.customCards || [];
 // @ts-expect-error
 window.customCards.push({
   type: 'bar-card',
   name: 'Bar Card',
-  preview: false, // Optional - defaults to false
-  description: 'A customizable bar card.', // Optional
+  preview: false,
+  description: 'A customizable bar card.',
 });
