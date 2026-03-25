@@ -4,14 +4,113 @@ import { HomeAssistant, fireEvent, LovelaceCardEditor } from 'custom-card-helper
 import { BarCardConfig } from './types';
 import { createEditorConfigArray, arrayMove, hasConfigOrEntitiesChanged } from './helpers';
 
+interface EditorActionConfig {
+  action?: string;
+  navigation_path?: string;
+  url_path?: string;
+  service?: string;
+}
+
+interface EditorAnimationConfig {
+  state?: string;
+  speed?: string | number;
+}
+
+interface EditorPositionsConfig {
+  [key: string]: string | undefined;
+}
+
+interface EditorSeverityConfig {
+  from?: string | number;
+  to?: string | number;
+  color?: string;
+  icon?: string;
+  hide?: boolean;
+}
+
+type BaseEditorBarConfig = Omit<
+  Partial<BarCardConfig>,
+  'animation' | 'positions' | 'severity' | 'tap_action' | 'hold_action' | 'double_tap_action' | 'entities'
+>;
+
+interface EditorBarConfig extends BaseEditorBarConfig {
+  entity?: string;
+  entities?: EditorBarConfig[];
+  animation?: EditorAnimationConfig;
+  positions?: EditorPositionsConfig;
+  severity?: EditorSeverityConfig[];
+  tap_action?: EditorActionConfig;
+  hold_action?: EditorActionConfig;
+  double_tap_action?: EditorActionConfig;
+}
+
+interface EditorOption {
+  icon: string;
+  name: string;
+  secondary: string;
+  show: boolean;
+}
+
+interface EditorEntityOptionGroup {
+  show: boolean;
+  options: {
+    positions: EditorOption;
+    bar: EditorOption;
+    value: EditorOption;
+    severity: EditorOption;
+    actions: EditorOption;
+    animation: EditorOption;
+  };
+}
+
+interface EditorOptionsState {
+  entities: EditorOption & {
+    options: {
+      entities: EditorEntityOptionGroup[];
+    };
+  };
+  appearance: EditorOption & {
+    options: {
+      positions: EditorOption;
+      bar: EditorOption;
+      value: EditorOption;
+      card: EditorOption;
+      severity: EditorOption;
+      animation: EditorOption;
+      actions: EditorOption;
+    };
+  };
+}
+
+interface EditorEventTarget extends EventTarget {
+  value?: string | number | boolean;
+  checked?: boolean;
+  configObject?: EditorBarConfig | EditorAnimationConfig | EditorPositionsConfig | EditorActionConfig;
+  configAttribute?: string;
+  configAdd?: string;
+  configAddObject?: EditorBarConfig;
+  configAddValue?: string;
+  configArray?: EditorBarConfig[];
+  configDirection?: string;
+  configIndex?: number;
+  index?: number | null;
+  severityIndex?: number;
+  severityAttribute?: keyof EditorSeverityConfig;
+  actionKey?: keyof EditorBarConfig;
+  actionAttribute?: keyof EditorActionConfig;
+  options?: EditorOption | EditorEntityOptionGroup;
+  optionsTarget?: EditorOptionsState | EditorEntityOptionGroup[] | Record<string, EditorOption>;
+  ignoreNull?: boolean;
+}
+
 @customElement('bar-card-editor')
 export class BarCardEditor extends LitElement implements LovelaceCardEditor {
   @property() public hass?: HomeAssistant;
-  @property() private _config;
+  @property() private _config: EditorBarConfig = {};
   @property() private _toggle?: boolean;
-  private _configArray: any[] = [];
-  private _entityOptionsArray: object[] = [];
-  private _options: any;
+  private _configArray: EditorBarConfig[] = [];
+  private _entityOptionsArray: EditorEntityOptionGroup[] = [];
+  private _options!: EditorOptionsState;
 
   protected shouldUpdate(changedProps: PropertyValues): boolean {
     return hasConfigOrEntitiesChanged(this, changedProps, true);
@@ -21,7 +120,6 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     this._config = { ...config };
     this._configArray = [];
     this._entityOptionsArray = [];
-    this._options = undefined;
 
     if (!config.entity && !config.entities) {
       this._config.entity = 'none';
@@ -37,13 +135,13 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (this._config.animation) {
       if (Object.entries(this._config.animation).length === 0) {
         delete this._config.animation;
-        fireEvent(this, 'config-changed', { config: this._config });
+        this._emitConfigChanged();
       }
     }
     if (this._config.positions) {
       if (Object.entries(this._config.positions).length === 0) {
         delete this._config.positions;
-        fireEvent(this, 'config-changed', { config: this._config });
+        this._emitConfigChanged();
       }
     }
 
@@ -60,7 +158,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       }
     }
     this._config.entities = this._configArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
 
     const barOptions = {
       icon: 'format-list-numbered',
@@ -123,42 +221,73 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       },
     };
 
-    for (const config of this._configArray) {
+    this._configArray.forEach(() => {
       this._entityOptionsArray.push({ ...entityOptions });
-    }
-    if (!this._options) {
-      this._options = {
-        entities: {
-          icon: 'tune',
-          name: 'Entities',
-          secondary: 'Manage card entities.',
-          show: true,
-          options: {
-            entities: this._entityOptionsArray,
-          },
+    });
+    this._options = {
+      entities: {
+        icon: 'tune',
+        name: 'Entities',
+        secondary: 'Manage card entities.',
+        show: true,
+        options: {
+          entities: this._entityOptionsArray,
         },
-        appearance: {
-          icon: 'palette',
-          name: 'Appearance',
-          secondary: 'Customize the global name, icon, etc.',
-          show: false,
-          options: {
-            positions: positionsOptions,
-            bar: barOptions,
-            value: valueOptions,
-            card: cardOptions,
-            severity: severityOptions,
-            animation: animationOptions,
-            actions: actionsOptions,
-          },
+      },
+      appearance: {
+        icon: 'palette',
+        name: 'Appearance',
+        secondary: 'Customize the global name, icon, etc.',
+        show: false,
+        options: {
+          positions: positionsOptions,
+          bar: barOptions,
+          value: valueOptions,
+          card: cardOptions,
+          severity: severityOptions,
+          animation: animationOptions,
+          actions: actionsOptions,
         },
-      };
-    }
+      },
+    };
   }
 
   protected render(): TemplateResult | void {
     return html`
       <div class="editor-shell">${this._createEntitiesElement()} ${this._createAppearanceElement()}</div>
+    `;
+  }
+
+  private _emitConfigChanged(): void {
+    fireEvent(this, 'config-changed', { config: this._config as BarCardConfig });
+  }
+
+  private _getEntityHint(config: EditorBarConfig): string {
+    if (!this.hass || !config.entity) {
+      return 'Choose an entity id to configure bar-specific settings.';
+    }
+
+    const stateObj = this.hass.states[config.entity];
+    if (!stateObj) {
+      return 'Entity not found in Home Assistant yet. Verify the entity id.';
+    }
+
+    const friendlyName = stateObj.attributes.friendly_name || config.entity;
+    return `${friendlyName}: ${stateObj.state}`;
+  }
+
+  private _renderHelperText(text: string): TemplateResult {
+    return html`
+      <div class="helper-text">${text}</div>
+    `;
+  }
+
+  private _renderEmptyState(title: string, description: string): TemplateResult {
+    return html`
+      <div class="empty-state">
+        <div class="empty-title">${title}</div>
+        <div class="empty-description">${description}</div>
+      </div>
     `;
   }
 
@@ -320,6 +449,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         ${options.show
           ? html`
               <div class="value">
+                ${this._renderHelperText('Actions inherit Home Assistant behavior. Leave them empty to keep defaults.')}
                 ${actionConfigs.map(actionConfig => this._renderFieldAction(actionConfig, config))}
               </div>
             `
@@ -334,6 +464,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     }
 
     const options = this._options.entities;
+    const entityArray = this._config.entities || this._configArray;
     const valueElementArray: TemplateResult[] = [];
     for (const config of this._configArray) {
       const index = this._configArray.indexOf(config);
@@ -367,6 +498,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
               .value=${config.entity}
             >
             </paper-input>
+            ${this._renderHelperText(this._getEntityHint(config))}
           </div>
           <div class="stack-actions icon-group">
             ${index !== 0
@@ -376,7 +508,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                     icon="mdi:arrow-up"
                     @click=${this._moveEntity}
                     .configDirection=${'up'}
-                    .configArray=${this._config!.entities}
+                    .configArray=${entityArray}
                     .arrayAttribute=${'entities'}
                     .arraySource=${this._config}
                     .index=${index}
@@ -392,7 +524,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                     icon="mdi:arrow-down"
                     @click=${this._moveEntity}
                     .configDirection=${'down'}
-                    .configArray=${this._config!.entities}
+                    .configArray=${entityArray}
                     .arrayAttribute=${'entities'}
                     .arraySource=${this._config}
                     .index=${index}
@@ -444,7 +576,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         ${options.show
           ? html`
               <div class="card-background section-scroll">
-                ${this._createEntitiesValues()}
+                ${this._configArray.length > 0
+                  ? this._createEntitiesValues()
+                  : this._renderEmptyState('No entities yet', 'Add your first entity to start configuring bars.')}
                 <div class="sub-category add-row">
                   <ha-fab
                     mini
@@ -518,6 +652,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         ${options.show
           ? html`
               <div class="value">
+                ${this._renderHelperText('Use CSS values like 40px, 100%, or theme colors to fine-tune the bar.')}
                 <div>
                   <label class="select-label">Direction</label>
                   <select
@@ -624,6 +759,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
           ? config.animation
             ? html`
                 <div class="value">
+                  ${this._renderHelperText('Animation can be turned on globally or per entity. Speed is in seconds.')}
                   <div>
                     <label class="select-label">State</label>
                     <select
@@ -666,6 +802,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
               `
             : html`
                 <div class="value">
+                  ${this._renderHelperText('Set a state to create the animation block, then fine-tune the speed.')}
                   <div>
                     <label class="select-label">State</label>
                     <select
@@ -732,7 +869,10 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
                   ? html`
                       ${this._createSeverityValues(index)}
                     `
-                  : ''}
+                  : this._renderEmptyState(
+                      'No severity rules',
+                      'Add ranges to map values to colors, icons, or hide rules.',
+                    )}
                 <div class="sub-category add-row">
                   <ha-fab mini icon="mdi:plus" @click=${this._addSeverity} .index=${index}></ha-fab>
                 </div>
@@ -858,8 +998,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this.hass) {
       return html``;
     }
-    const config: any = this._config;
-    const index = null;
+    const config = this._config;
     const options = this._options.appearance.options.card;
     return html`
       <div class="category" id="card">
@@ -879,6 +1018,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         ${options.show
           ? html`
               <div class="value-container">
+                ${this._renderHelperText(
+                  'Card-level settings apply to the whole stack and work best when shared across entities.',
+                )}
                 <paper-input
                   editable
                   label="Header Title"
@@ -990,13 +1132,10 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     }
 
     let options;
-    let config;
     if (index === null) {
       options = this._options.appearance.options.positions;
-      config = this._config;
     } else {
       options = this._options.entities.options.entities[index].options.positions;
-      config = this._configArray[index];
     }
     return html`
       <div class="category">
@@ -1016,6 +1155,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         ${options.show
           ? html`
               <div class="positions-grid">${this._createPositionsValues(index)}</div>
+              ${this._renderHelperText(
+                'For advanced combinations, YAML still supports values beyond these quick presets.',
+              )}
             `
           : ``}
       </div>
@@ -1055,6 +1197,9 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         ${options.show
           ? html`
               <div class="value">
+                ${this._renderHelperText(
+                  'Min, max, and target support simple numbers here. Use YAML for entity-driven objects.',
+                )}
                 <div class="toggle-grid">
                   ${this._renderToggleField('Limit Value', config, 'limit_value')}
                   ${this._renderToggleField('Complementary', config, 'complementary')}
@@ -1150,7 +1295,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     }
 
     this._config.entities = this._configArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   private _toggleThing(ev): void {
@@ -1186,7 +1331,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     const newArray = target.configArray.slice();
     newArray.push(newObject);
     this._config.entities = newArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   private _moveEntity(ev): void {
@@ -1198,7 +1343,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (target.configDirection == 'up') newArray = arrayMove(newArray, target.index, target.index - 1);
     else if (target.configDirection == 'down') newArray = arrayMove(newArray, target.index, target.index + 1);
     this._config.entities = newArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   private _removeEntity(ev): void {
@@ -1206,7 +1351,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       return;
     }
     const target = ev.currentTarget || ev.target;
-    const entitiesArray: BarCardConfig[] = [];
+    const entitiesArray: EditorBarConfig[] = [];
     let index = 0;
     for (const config of this._configArray) {
       if (target.configIndex !== index) {
@@ -1216,7 +1361,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     }
     const newConfig = { [target.configArray]: entitiesArray };
     this._config = Object.assign(this._config, newConfig);
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   private _addSeverity(ev): void {
@@ -1229,7 +1374,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (target.index === null) {
       severityArray = this._config.severity;
     } else {
-      severityArray = this._config.entities[target.index].severity;
+      severityArray = this._config.entities ? this._config.entities[target.index].severity : undefined;
     }
 
     if (!severityArray) {
@@ -1246,7 +1391,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       this._configArray[target.index].severity = newArray;
     }
     this._config.entities = this._configArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   private _moveSeverity(ev): void {
@@ -1259,7 +1404,11 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     if (target.index === null) {
       severityArray = this._config.severity;
     } else {
-      severityArray = this._config.entities[target.index].severity;
+      severityArray = this._config.entities ? this._config.entities[target.index].severity : undefined;
+    }
+
+    if (!severityArray) {
+      return;
     }
 
     let newArray = severityArray.slice();
@@ -1275,7 +1424,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       this._configArray[target.index].severity = newArray;
     }
     this._config.entities = this._configArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   private _removeSeverity(ev): void {
@@ -1292,11 +1441,11 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     }
 
     const clonedArray = severityArray.slice();
-    const newArray: any = [];
+    const newArray: EditorSeverityConfig[] = [];
     let arrayIndex = 0;
-    for (const config of clonedArray) {
+    for (const severity of clonedArray) {
       if (target.severityIndex !== arrayIndex) {
-        newArray.push(clonedArray[arrayIndex]);
+        newArray.push(severity);
       }
       arrayIndex++;
     }
@@ -1314,7 +1463,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       }
     }
     this._config.entities = this._configArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   private _updateSeverity(ev): void {
@@ -1326,7 +1475,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
     } else {
       severityArray = this._configArray[target.index].severity;
     }
-    const newSeverityArray: any = [];
+    const newSeverityArray: EditorSeverityConfig[] = [];
     for (const index in severityArray) {
       if (target.severityIndex == index) {
         const clonedObject = { ...severityArray[index] };
@@ -1347,7 +1496,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       this._configArray[target.index].severity = newSeverityArray;
     }
     this._config.entities = this._configArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   private _valueChanged(ev): void {
@@ -1373,7 +1522,7 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
       }
     }
     this._config.entities = this._configArray;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitConfigChanged();
   }
 
   static get styles(): CSSResult {
@@ -1468,6 +1617,27 @@ export class BarCardEditor extends LitElement implements LovelaceCardEditor {
         color: var(--secondary-text-color);
         font-size: 12px;
         margin-bottom: 4px;
+      }
+      .helper-text {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .empty-state {
+        padding: 18px 16px;
+        border: 1px dashed var(--divider-color);
+        border-radius: 12px;
+        text-align: center;
+        color: var(--secondary-text-color);
+      }
+      .empty-title {
+        color: var(--primary-text-color);
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .empty-description {
+        font-size: 13px;
+        line-height: 1.45;
       }
       .card-config {
         display: block;
